@@ -72,7 +72,7 @@ class Tools:
             async with httpx.AsyncClient(timeout=90) as client:
                 response = await client.post(
                     self.config.rag_url + "/query",
-                    headers={"Authorization": "Bearer " + self.config.rag_key},
+                    headers={"Authorization": "Bearer " + rag_key},
                     json={
                         "question": question,
                         "mode": args.get("mode", "hybrid"),
