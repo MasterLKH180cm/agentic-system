@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "agentic_workflows": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "-m",
+        "agentic.mcp_server"
+      ]
+    }
+  }
+}

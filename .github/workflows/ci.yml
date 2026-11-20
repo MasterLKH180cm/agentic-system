@@ -1,0 +1,87 @@
+name: Agentic System CI
+
+on:
+  push:
+    branches: ["master", "feat/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      AGENT_ENV: test
+      AGENT_MODEL_PROVIDER: offline
+      AGENT_RAG_API_KEY: local-development-key
+      AGENT_RAG_URL: http://127.0.0.1:8000
+      RAGS_ENV: test
+      RAGS_API_KEY: local-development-key
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout RAGs dependency
+        uses: actions/checkout@v4
+        with:
+          repository: MasterLKH180cm/RAGs
+          ref: 76ac10b63dac8b3ecc4cd099222f6ee6cc489877 # tested RAGs master squash commit
+          path: external/RAGs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install both services
+        run: |
+          python -m pip install -e ".[dev,mcp]"
+          python -m pip install -e ./external/RAGs
+      - name: Static analysis
+        run: ruff check agentic tests --select E4,E7,E9,F
+      - name: Integration tests
+        run: pytest -q
+      - name: Real two-service end-to-end smoke test
+        shell: bash
+        run: |
+          uvicorn rags.api:app --host 127.0.0.1 --port 8000 &
+          rag_pid=$!
+          uvicorn agentic.api:app --host 127.0.0.1 --port 8001 &
+          api_pid=$!
+          python -m agentic.worker &
+          worker_pid=$!
+          trap "kill $rag_pid $api_pid $worker_pid || true" EXIT
+          python - <<'PY'
+          import time
+          import httpx
+
+          with httpx.Client(timeout=8) as c:
+              for i in range(50):
+                  try:
+                      assert c.get("http://127.0.0.1:8000/live").status_code == 200
+                      assert c.get("http://127.0.0.1:8001/live").status_code == 200
+                      break
+                  except Exception:
+                      time.sleep(0.2)
+              else:
+                  raise AssertionError("Both services failed to start")
+              a = {"Authorization": "Bearer local-development-key"}
+              b = {"Authorization": "Bearer local-agent-key"}
+              doc = c.post("http://127.0.0.1:8000/documents", headers=a,
+                  json={"title": "Test session policy", "text":
+                        "# Session\nSession timeout is 30 minutes after inactivity."})
+              assert doc.status_code == 201, doc.text
+              run = c.post("http://127.0.0.1:8001/workflows", headers=b,
+                           json={"goal": "What is the session timeout?"})
+              assert run.status_code == 202, run.text
+              rid = run.json()["id"]
+              for i in range(100):
+                  state = c.get("http://127.0.0.1:8001/workflows/" + rid, headers=b).json()
+                  if state["status"] in ("completed", "failed"):
+                      break
+                  time.sleep(0.2)
+              assert state["status"] == "completed", state
+              assert len(state["steps"]) == 2
+              assert state["steps"][0]["result"]["citations"], state
+              assert "30 minutes" in state["steps"][1]["result"]["answer"], state
+              print("PASS: real RAGs -> API -> leased worker -> synthesis")
+          PY
+          python tests/smoke_mcp.py

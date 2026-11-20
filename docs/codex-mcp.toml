@@ -1,0 +1,7 @@
+# Copy to ~/.codex/config.toml (or trusted project's .codex/config.toml).
+# Export AGENT_URL and AGENT_API_KEY locally; never commit real credentials.
+[mcp_servers.agentic_workflows]
+command = "python"
+args = ["-m", "agentic.mcp_server"]
+env_vars = ["AGENT_URL", "AGENT_API_KEY"]
+startup_timeout_sec = 20
