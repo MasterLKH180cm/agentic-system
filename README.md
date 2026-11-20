@@ -124,7 +124,9 @@ read-only knowledge search. AGENTS.md and CLAUDE.md align coding instructions.
     ruff check agentic tests --select E4,E7,E9,F
 
 CI also launches **both actual APIs and a real worker process** to run an
-end-to-end RAG retrieval and dependent synthesis workflow.
+end-to-end RAG retrieval and dependent synthesis workflow. It additionally
+performs real stdio MCP initialize/list_tools/call_tool exchanges against
+both local MCP servers, exercising the protocol used by Codex and Claude Code.
 
 Production requires AGENT_KEYS_JSON (strong per-tenant tokens) and an external
 identity gateway; approvals additionally require AGENT_APPROVER_KEYS_JSON.

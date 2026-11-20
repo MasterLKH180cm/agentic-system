@@ -84,3 +84,4 @@ jobs:
               assert "30 minutes" in state["steps"][1]["result"]["answer"], state
               print("PASS: real RAGs -> API -> leased worker -> synthesis")
           PY
+          python tests/smoke_mcp.py
