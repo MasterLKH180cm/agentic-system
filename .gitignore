@@ -221,3 +221,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Agentic workflow state and local configuration
+/data/
+*.db
+*.db-shm
+*.db-wal
+.ruff_cache/

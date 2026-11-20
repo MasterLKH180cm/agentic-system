@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: feat/production-rag-platform
+          ref: 76ac10b63dac8b3ecc4cd099222f6ee6cc489877 # tested RAGs master squash commit
           path: external/RAGs
       - uses: actions/setup-python@v5
         with:

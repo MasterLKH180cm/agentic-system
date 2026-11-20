@@ -109,8 +109,8 @@ Both clients can connect through the stdio MCP tools:
       python -m agentic.mcp_server
 
 Reference configurations are available in docs/codex-mcp.toml and
-docs/claude-mcp.json; they forward runtime environment variables without
-committing API secrets.
+docs/claude-mcp.json. The stdio process inherits AGENT_URL and AGENT_API_KEY
+from the trusted host shell; configure them locally, never in a committed file.
 
 In the client's local MCP configuration, register command "python", args
 ["-m","agentic.mcp_server"], and environment variables AGENT_URL / AGENT_API_KEY
