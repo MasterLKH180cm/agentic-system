@@ -3,6 +3,8 @@
 SQLite supports a small deployment with multiple worker processes on one shared
 filesystem. Production multi-node installations should use PostgreSQL/Temporal.
 """
+from __future__ import annotations
+
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
