@@ -1,6 +1,6 @@
 # Agentic System v0.2 specification
 
-Status: implementation contract, approved by the user's instruction to specify, implement, and self-review.
+Status: implementation contract prepared and committed before feature code, following the requested specification, implementation, and self-review sequence.
 Baseline: v0.1 at a32d3dff2c5b57f44800dfe3d8b2a726e1525db0.
 Companion: RAGs/docs/SPEC_V02.md.
 

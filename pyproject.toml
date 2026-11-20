@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentic-system-platform"
-version = "0.1.0"
+version = "0.2.0"
 description = "Durable workflow engine and bounded agent tools for RAGs"
 requires-python = ">=3.11"
 dependencies = [
@@ -12,10 +12,14 @@ dependencies = [
     "uvicorn>=0.30,<1",
     "pydantic>=2.8,<3",
     "httpx>=0.27,<1",
+    "PyJWT[crypto]>=2.9,<3",
 ]
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.19,<2"]
+postgres = ["psycopg[binary]>=3.2,<4"]
+storage = ["boto3>=1.35,<2", "redis>=5,<7"]
+telemetry = ["opentelemetry-api>=1.28,<2", "opentelemetry-sdk>=1.28,<2", "opentelemetry-exporter-otlp-proto-http>=1.28,<2"]
 dev = ["pytest>=8,<10", "ruff>=0.8,<1", "pytest-asyncio>=0.23,<2"]
 
 [tool.hatch.build.targets.wheel]
@@ -24,6 +28,7 @@ packages = ["agentic"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
 target-version = "py311"

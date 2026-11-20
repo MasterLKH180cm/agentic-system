@@ -135,7 +135,8 @@ def test_real_rag_tool_contract_via_mock_http(system, monkeypatch):
             assert request.url.path == "/query"
             return httpx.Response(200, json={
                 "answer": "Sessions expire after 30 minutes.",
-                "citations": [{"chunk_id": "c1", "document_id": "doc1"}],
+                "citations": [{"chunk_id": "c1", "document_id": "doc1",
+                               "text": "Sessions expire after 30 minutes."}],
                 "mode_used": "hybrid",
             })
         return original(*args, transport=httpx.MockTransport(handler), **kwargs)

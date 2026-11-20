@@ -2,11 +2,15 @@ name: Agentic System CI
 
 on:
   push:
-    branches: ["master", "feat/**"]
+    branches: ["master"]
   pull_request:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   integration:
@@ -25,7 +29,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 76ac10b63dac8b3ecc4cd099222f6ee6cc489877 # tested RAGs master squash commit
+          ref: aff48b3a53029a2febea0366055845f14b69bbfa # exact companion v0.2 implementation commit
           path: external/RAGs
       - uses: actions/setup-python@v5
         with:
@@ -33,12 +37,14 @@ jobs:
           cache: pip
       - name: Install both services
         run: |
-          python -m pip install -e ".[dev,mcp]"
+          python -m pip install -e ".[dev,mcp,telemetry]"
           python -m pip install -e ./external/RAGs
       - name: Static analysis
         run: ruff check agentic tests --select E4,E7,E9,F
       - name: Integration tests
         run: pytest -q
+      - name: v0.2 lifecycle, bounded runtime, approvals, artifacts and MCP
+        run: python tests/e2e_v02.py
       - name: Real two-service end-to-end smoke test
         shell: bash
         run: |
@@ -97,7 +103,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 76ac10b63dac8b3ecc4cd099222f6ee6cc489877
+          ref: aff48b3a53029a2febea0366055845f14b69bbfa
           path: external/RAGs
       - name: Put the sibling RAGs build context in place
         run: |
@@ -191,3 +197,67 @@ jobs:
       - name: Clean up the stack
         if: always()
         run: docker compose down -v --remove-orphans
+
+  external-storage:
+    name: Real PostgreSQL, Redis and S3 integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: agenttest
+          POSTGRES_PASSWORD: disposable-ci-password
+          POSTGRES_DB: agenttest
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      AGENT_ENV: test
+      RAGS_ENV: test
+      AGENT_TEST_POSTGRES_URL: postgresql://agenttest:disposable-ci-password@127.0.0.1:5432/agenttest
+      AGENT_E2E_POSTGRES_URL: postgresql://agenttest:disposable-ci-password@127.0.0.1:5432/agenttest
+      AGENT_TEST_REDIS_URL: redis://127.0.0.1:6379/0
+      AGENT_TEST_S3_ENDPOINT: http://127.0.0.1:9000
+      AWS_ACCESS_KEY_ID: agent-test-user
+      AWS_SECRET_ACCESS_KEY: disposable-ci-s3-password
+      AWS_DEFAULT_REGION: us-east-1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout RAGs dependency
+        uses: actions/checkout@v4
+        with:
+          repository: MasterLKH180cm/RAGs
+          ref: aff48b3a53029a2febea0366055845f14b69bbfa
+          path: external/RAGs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[dev,mcp,postgres,storage,telemetry]" -e ./external/RAGs
+      - name: Start disposable S3-compatible server
+        run: |
+          docker run -d --name agentic-s3 -p 127.0.0.1:9000:9000 \
+            -e MINIO_ROOT_USER=agent-test-user -e MINIO_ROOT_PASSWORD=disposable-ci-s3-password \
+            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:9000/minio/health/live && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:9000/minio/health/live
+      - name: Actual external service contracts
+        run: pytest -q tests/test_platform.py
+      - name: Full API and worker flow using PostgreSQL
+        run: python tests/e2e_v02.py
+      - name: Remove disposable object store
+        if: always()
+        run: docker rm -f agentic-s3 || true
