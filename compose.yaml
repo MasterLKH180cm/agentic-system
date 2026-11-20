@@ -1,0 +1,49 @@
+# Local-only example. Clone RAGs and agentic-system as sibling folders.
+# The fixed DEMO keys below MUST NOT be used on publicly exposed systems.
+x-agent-env: &agent-env
+  AGENT_ENV: development
+  AGENT_API_KEY: local-agent-key
+  AGENT_DB_PATH: /app/data/agentic.db
+  AGENT_RAG_URL: http://rags:8000
+  AGENT_RAG_API_KEY: local-development-key
+  AGENT_MODEL_PROVIDER: offline
+  AGENT_MAX_PARALLEL: 4
+
+services:
+  rags:
+    build: ../RAGs
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      RAGS_ENV: development
+      RAGS_API_KEY: local-development-key
+      RAGS_DB_PATH: /app/data/rags.db
+    volumes:
+      - rag-data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/live',timeout=3)"]
+      interval: 5s
+      retries: 10
+  api:
+    build: .
+    ports:
+      - "127.0.0.1:8001:8001"
+    environment: *agent-env
+    volumes:
+      - agent-data:/app/data
+    depends_on:
+      rags:
+        condition: service_healthy
+  worker:
+    build: .
+    command: ["python", "-m", "agentic.worker"]
+    environment: *agent-env
+    volumes:
+      - agent-data:/app/data
+    depends_on:
+      rags:
+        condition: service_healthy
+
+volumes:
+  rag-data:
+  agent-data:
