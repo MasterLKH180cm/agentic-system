@@ -26,7 +26,7 @@ def system(monkeypatch, tmp_path):
         '{"approve-a":"tenant-a","approve-b":"tenant-b"}',
     )
     monkeypatch.setenv("AGENT_MODEL_PROVIDER", "offline")
-    monkeypatch.setenv("AGENT_RAG_API_KEY", "rag-key")
+    monkeypatch.setenv("AGENT_RAG_KEYS_JSON", '{"tenant-a":"rag-a","tenant-b":"rag-b"}')
     config = Settings.from_env()
     app = create_app(config)
     with TestClient(app) as client:
@@ -131,7 +131,7 @@ def test_real_rag_tool_contract_via_mock_http(system, monkeypatch):
 
     def fake_client(*args, **kwargs):
         def handler(request):
-            assert request.headers["authorization"] == "Bearer rag-key"
+            assert request.headers["authorization"] == "Bearer rag-a"
             assert request.url.path == "/query"
             return httpx.Response(200, json={
                 "answer": "Sessions expire after 30 minutes.",

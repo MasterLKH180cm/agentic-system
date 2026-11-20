@@ -10,7 +10,7 @@ class Settings:
     db_path: str
     keys: dict[str, str]
     rag_url: str
-    rag_key: str
+    rag_keys: dict[str, str]
     provider: str
     openai_key: str
     openai_base_url: str
@@ -43,11 +43,26 @@ class Settings:
         concurrency = int(os.getenv("AGENT_MAX_PARALLEL", "4"))
         if not 1 <= concurrency <= 16:
             raise ValueError("AGENT_MAX_PARALLEL must be 1..16")
+        try:
+            rag_keys = json.loads(os.getenv("AGENT_RAG_KEYS_JSON", "{}"))
+        except json.JSONDecodeError as exc:
+            raise ValueError("AGENT_RAG_KEYS_JSON must be valid JSON") from exc
+        if not isinstance(rag_keys, dict) or any(
+            not isinstance(t, str) or not t or not isinstance(k, str) or not k
+            for t, k in rag_keys.items()
+        ):
+            raise ValueError("AGENT_RAG_KEYS_JSON must map tenant IDs to RAG API keys")
+        if env in {"development", "test"} and not rag_keys and set(keys.values()) == {"local"}:
+            rag_keys = {"local": os.getenv("AGENT_RAG_API_KEY", "local-development-key")}
+        if any(t not in rag_keys for t in keys.values()):
+            raise ValueError("Every configured tenant requires a tenant-specific RAG key")
+        if len(set(rag_keys.values())) != len(rag_keys):
+            raise ValueError("Different tenants must not share a RAG API key")
         return cls(
             db_path=os.getenv("AGENT_DB_PATH", str(Path("data") / "agentic.db")),
             keys=keys,
             rag_url=os.getenv("AGENT_RAG_URL", "http://127.0.0.1:8000").rstrip("/"),
-            rag_key=os.getenv("AGENT_RAG_API_KEY", ""),
+            rag_keys=rag_keys,
             provider=provider,
             openai_key=os.getenv("OPENAI_API_KEY", ""),
             openai_base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/"),

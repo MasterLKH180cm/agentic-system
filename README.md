@@ -108,6 +108,10 @@ Both clients can connect through the stdio MCP tools:
       AGENT_API_KEY=local-agent-key \
       python -m agentic.mcp_server
 
+Reference configurations are available in docs/codex-mcp.toml and
+docs/claude-mcp.json; they forward runtime environment variables without
+committing API secrets.
+
 In the client's local MCP configuration, register command "python", args
 ["-m","agentic.mcp_server"], and environment variables AGENT_URL / AGENT_API_KEY
 from a local secret store. MCP tools: start_research_workflow,
@@ -124,4 +128,7 @@ end-to-end RAG retrieval and dependent synthesis workflow.
 
 Production requires AGENT_KEYS_JSON (strong per-tenant tokens) and an external
 identity gateway; approvals additionally require AGENT_APPROVER_KEYS_JSON.
+For every tenant, AGENT_RAG_KEYS_JSON must map its tenant ID to a DISTINCT
+RAGs API key configured in that tenant's RAGS_KEYS_JSON entry; a single shared
+RAG credential for multiple tenants is explicitly rejected.
 See [Architecture](docs/ARCHITECTURE.md) for threat model and limitations.

@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "agentic_workflows": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "-m",
+        "agentic.mcp_server"
+      ],
+      "env": {
+        "AGENT_URL": "${AGENT_URL:-http://127.0.0.1:8001}",
+        "AGENT_API_KEY": "${AGENT_API_KEY}"
+      }
+    }
+  }
+}

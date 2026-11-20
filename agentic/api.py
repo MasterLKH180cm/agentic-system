@@ -34,6 +34,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ):
         raise ValueError("Approver tokens must map to tenant IDs")
 
+    if set(approver_keys) & set(config.keys):
+        raise ValueError("Approver and requester credentials must be disjoint")
+
     def authorize(auth_header: str | None, tokens: dict[str, str]) -> str:
         if not auth_header or not auth_header.startswith("Bearer "):
             raise HTTPException(status_code=401, detail="Bearer token required")

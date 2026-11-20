@@ -21,6 +21,8 @@
 ## Security boundaries
 
 - API tokens are mapped server-side to tenants. No tenant can select another tenant.
+- RAG requests use a DISTINCT per-tenant RAG API key (AGENT_RAG_KEYS_JSON), never
+  one shared service key that could cross knowledge-base tenant boundaries.
 - Approval uses a **different** token-to-tenant mapping, never the requester's token.
 - Supported tools are allowlisted and validated. No arbitrary shell, SQL or URL tool.
 - URL for RAGs is set by the operator, never by an agent-supplied workflow argument.

@@ -63,8 +63,9 @@ class Tools:
             expression = args.get("expression", "")
             return {"expression": expression, "value": safe_calculate(expression)}
         if tool == "rag.search":
-            if not self.config.rag_key:
-                raise ValueError("AGENT_RAG_API_KEY required for RAG search")
+            rag_key = rag_keys.get(job["tenant"])
+            if not rag_key:
+                raise PermissionError("No RAG credential for workflow tenant")
             question = args.get("question") or job["goal"]
             if not isinstance(question, str) or not 2 <= len(question) <= 2000:
                 raise ValueError("Invalid RAG question")
