@@ -128,8 +128,18 @@ jobs:
               with urllib.request.urlopen(req, timeout=8) as response:
                   return json.loads(response.read())
 
-          assert request("8000/live")["status"] == "ok"
-          assert request("8001/live")["status"] == "ok"
+          # --wait only ensures "running" for services without healthchecks;
+          # probe both reachable HTTP endpoints before the first test request.
+          for port in ("8000", "8001"):
+              for attempt in range(40):
+                  try:
+                      if request(port + "/live")["status"] == "ok":
+                          break
+                  except (OSError, urllib.error.URLError):
+                      pass
+                  time.sleep(0.25)
+              else:
+                  raise AssertionError("API not ready on port " + port)
           doc = request("8000/documents", "local-development-key", {
               "document_id": "docker-verification",
               "title": "Docker verification",
