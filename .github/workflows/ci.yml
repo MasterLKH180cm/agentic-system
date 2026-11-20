@@ -103,6 +103,32 @@ jobs:
         run: |
           mkdir -p ../RAGs
           cp -a external/RAGs/. ../RAGs/
+      - name: Verify offline defaults and model provider wiring
+        run: |
+          docker compose config --format json > /tmp/compose-offline.json
+          RAGS_MODEL_PROVIDER=openai \
+          RAGS_EMBEDDING_PROVIDER=openai \
+          AGENT_MODEL_PROVIDER=anthropic \
+          OPENAI_API_KEY=fixture-openai-key \
+          ANTHROPIC_API_KEY=fixture-anthropic-key \
+            docker compose config --format json > /tmp/compose-providers.json
+          python - <<'PY'
+          import json
+          with open("/tmp/compose-offline.json") as f:
+              baseline = json.load(f)
+          with open("/tmp/compose-providers.json") as f:
+              configured = json.load(f)
+          assert baseline["services"]["rags"]["environment"]["RAGS_MODEL_PROVIDER"] == "extractive"
+          assert baseline["services"]["worker"]["environment"]["AGENT_MODEL_PROVIDER"] == "offline"
+          assert configured["services"]["rags"]["environment"]["RAGS_EMBEDDING_PROVIDER"] == "openai"
+          assert configured["services"]["rags"]["environment"]["RAGS_MODEL_PROVIDER"] == "openai"
+          for name in ("api", "worker"):
+              env = configured["services"][name]["environment"]
+              assert env["AGENT_MODEL_PROVIDER"] == "anthropic"
+              assert env["ANTHROPIC_API_KEY"] == "fixture-anthropic-key"
+          assert configured["services"]["rags"]["environment"]["OPENAI_API_KEY"] == "fixture-openai-key"
+          print("PASS: local defaults and provider-enabled Compose config")
+          PY
       - name: Build and run all three containers
         run: docker compose up -d --build --wait
       - name: Exercise the full stack from outside containers

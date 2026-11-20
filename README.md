@@ -27,6 +27,27 @@ Agent API: http://127.0.0.1:8001/docs
 This local Compose stack is restricted to localhost and uses DEMO credentials.
 Do not expose it on the public internet.
 
+### Enable real models in local Docker Compose
+
+Copy the environment sample and edit it locally, without committing credentials:
+
+    cp .env.example .env
+
+Set RAGS_EMBEDDING_PROVIDER=openai and OPENAI_API_KEY for trained embeddings.
+Use RAGS_MODEL_PROVIDER=openai or anthropic for generated grounded answers.
+Set AGENT_MODEL_PROVIDER=openai or anthropic for LLM-driven planning and
+synthesis. Set ANTHROPIC_API_KEY when selecting Claude. Both APIs and the
+worker receive the configured model provider from Compose.
+
+After changing the embedding provider or model, re-ingest documents because
+vectors from different embedding models are not interchangeable.
+
+    docker compose up -d --build --wait
+
+Using Claude Code or Codex through MCP is separate from which API model
+provider you select. The demo configuration is NEVER suitable for a publicly
+exposed multi-tenant deployment.
+
 ## Without Docker
 
 Start RAGs as documented in its README. In agentic-system:

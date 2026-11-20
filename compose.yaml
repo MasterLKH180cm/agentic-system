@@ -2,12 +2,17 @@
 # The fixed DEMO keys below MUST NOT be used on publicly exposed systems.
 x-agent-env: &agent-env
   AGENT_ENV: development
-  AGENT_API_KEY: local-agent-key
+  AGENT_API_KEY: ${AGENT_API_KEY:-local-agent-key}
   AGENT_DB_PATH: /app/data/agentic.db
   AGENT_RAG_URL: http://rags:8000
-  AGENT_RAG_API_KEY: local-development-key
-  AGENT_MODEL_PROVIDER: offline
-  AGENT_MAX_PARALLEL: 4
+  AGENT_RAG_API_KEY: ${RAGS_API_KEY:-local-development-key}
+  AGENT_MODEL_PROVIDER: ${AGENT_MODEL_PROVIDER:-offline}
+  AGENT_MAX_PARALLEL: ${AGENT_MAX_PARALLEL:-4}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+  OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4.1-mini}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  ANTHROPIC_CHAT_MODEL: ${ANTHROPIC_CHAT_MODEL:-claude-sonnet-4-5}
 
 services:
   rags:
@@ -16,8 +21,16 @@ services:
       - "127.0.0.1:8000:8000"
     environment:
       RAGS_ENV: development
-      RAGS_API_KEY: local-development-key
+      RAGS_API_KEY: ${RAGS_API_KEY:-local-development-key}
       RAGS_DB_PATH: /app/data/rags.db
+      RAGS_EMBEDDING_PROVIDER: ${RAGS_EMBEDDING_PROVIDER:-local}
+      RAGS_MODEL_PROVIDER: ${RAGS_MODEL_PROVIDER:-extractive}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4.1-mini}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_CHAT_MODEL: ${ANTHROPIC_CHAT_MODEL:-claude-sonnet-4-5}
     volumes:
       - rag-data:/app/data
     healthcheck:
