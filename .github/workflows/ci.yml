@@ -201,7 +201,7 @@ jobs:
   external-storage:
     name: Real PostgreSQL, Redis and S3 integration
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16
@@ -244,20 +244,53 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: python -m pip install -e ".[dev,mcp,postgres,storage,telemetry]" -e ./external/RAGs
+      - name: Checkout the fixed upstream S3 server source
+        uses: actions/checkout@v4
+        with:
+          repository: minio/minio
+          ref: 9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a # RELEASE.2025-10-15T17-29-55Z
+          path: external/minio
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.8"
+          cache-dependency-path: external/minio/go.sum
+      - name: Build the actual S3-compatible server
+        working-directory: external/minio
+        env:
+          CGO_ENABLED: "0"
+        run: go build -mod=readonly -p 2 -tags kqueue -trimpath -o "$RUNNER_TEMP/agentic-minio" .
       - name: Start disposable S3-compatible server
+        shell: bash
         run: |
-          docker run -d --name agentic-s3 -p 127.0.0.1:9000:9000 \
-            -e MINIO_ROOT_USER=agent-test-user -e MINIO_ROOT_PASSWORD=disposable-ci-s3-password \
-            quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
-          for i in $(seq 1 30); do
-            curl -fsS http://127.0.0.1:9000/minio/health/live && break
+          mkdir -p "$RUNNER_TEMP/agentic-minio-data"
+          MINIO_ROOT_USER="$AWS_ACCESS_KEY_ID" \
+          MINIO_ROOT_PASSWORD="$AWS_SECRET_ACCESS_KEY" MINIO_BROWSER=off \
+            nohup "$RUNNER_TEMP/agentic-minio" server \
+              --address 127.0.0.1:9000 --console-address 127.0.0.1:9001 \
+              "$RUNNER_TEMP/agentic-minio-data" \
+              > "$RUNNER_TEMP/agentic-minio.log" 2>&1 < /dev/null &
+          minio_pid=$!
+          printf '%s\n' "$minio_pid" > "$RUNNER_TEMP/agentic-minio.pid"
+          for attempt in $(seq 1 60); do
+            if curl -fsS --max-time 2 http://127.0.0.1:9000/minio/health/ready; then
+              break
+            fi
+            kill -0 "$minio_pid"
             sleep 1
           done
-          curl -fsS http://127.0.0.1:9000/minio/health/live
+          curl -fsS --max-time 2 http://127.0.0.1:9000/minio/health/ready
       - name: Actual external service contracts
         run: pytest -q tests/test_platform.py
       - name: Full API and worker flow using PostgreSQL
         run: python tests/e2e_v02.py
+      - name: Capture object-store diagnostics on failure
+        if: failure()
+        run: tail -n 100 "$RUNNER_TEMP/agentic-minio.log" || true
       - name: Remove disposable object store
         if: always()
-        run: docker rm -f agentic-s3 || true
+        shell: bash
+        run: |
+          if [[ -f "$RUNNER_TEMP/agentic-minio.pid" ]]; then
+            kill "$(cat "$RUNNER_TEMP/agentic-minio.pid")" || true
+          fi
