@@ -63,7 +63,7 @@ class Tools:
             expression = args.get("expression", "")
             return {"expression": expression, "value": safe_calculate(expression)}
         if tool == "rag.search":
-            rag_key = rag_keys.get(job["tenant"])
+            rag_key = self.config.rag_keys.get(job["tenant"])
             if not rag_key:
                 raise PermissionError("No RAG credential for workflow tenant")
             question = args.get("question") or job["goal"]
