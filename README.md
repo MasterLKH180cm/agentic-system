@@ -47,7 +47,7 @@ external service or production topology has been verified.
 | **L7 · Model Gateway** | [Purpose routes, transient fallback, reservations, usage reconciliation, output caps](agentic/model.py) | Gateway budgets cover agent planning/synthesis; RAGs and other external costs are separate |
 | **L8 · Tool & Integration** | [Typed tool registry](agentic/tools.py), fixed RAG endpoint, [stdio MCP](agentic/mcp_server.py) | Adaptive loops use read-only tools; arbitrary-code sandbox is explicitly unavailable |
 | **L9 · Knowledge & Memory** | [Tenant/namespace memory](agentic/memory.py), CRUD, TTL, provenance, bounded recall; cited retrieval through RAGs | Memory search is lexical; vector indexes belong to RAGs |
-| **L10 · Persistence** | SQLite; [PostgreSQL adapter](agentic/postgres.py); [local/S3 artifacts](agentic/storage_adapters.py); optional Redis limits | PostgreSQL serializes transactions with an advisory lock; Redis/S3 verification remains pending |
+| **L10 · Persistence** | SQLite; [PostgreSQL adapter](agentic/postgres.py); [local/S3 artifacts](agentic/storage_adapters.py); optional Redis limits | PostgreSQL serializes transactions with an advisory lock; actual service tests do not establish throughput or high availability |
 | **L11 · Governance** | Versioned tool/namespace/budget policies, disjoint approvers, provider-secret validation, redacted event metadata | Events are append-only application records, not a tamper-evident audit system |
 | **L12 · Observability & Quality** | [Optional OTLP traces/metrics](agentic/telemetry.py), usage records, evaluator outcomes and regression tests | Protocol tests and synthetic outcomes do not establish general answer quality or paid-provider quality |
 
@@ -401,14 +401,19 @@ ruff check agentic tests --select E4,E7,E9,F
 python tests/e2e_v02.py
 ```
 
-Locally verified: **35 core tests**, **4 platform tests**, the **real PostgreSQL
-16.2 Store test**, and the full **RAG HTTP + Agent HTTP + independent worker +
-both stdio MCP bridges** with SQLite and PostgreSQL. The
-[verification ledger](docs/IMPLEMENTATION_REVIEW.md) identifies exact evidence.
-[CI](.github/workflows/ci.yml) also defines container and external-storage jobs;
-a configured job is not evidence of a passing run. Redis/S3 service tests remain
-pending actual execution. Paid model quality and visual browser behavior have
-not been verified.
+The [recorded CI run](https://github.com/MasterLKH180cm/agentic-system/actions/runs/44799515210)
+passed all three jobs. The ordinary suite reports **54 passed, 3 skipped**
+(35 core, 4 platform, and 15 request-body/cursor checks). The three optional
+storage checks run in the external-service job, where **all 7 platform tests
+passed without skips** against actual PostgreSQL 16.16, Redis 7.4.12, and a
+MinIO server built from fixed upstream source. These counts overlap.
+
+The full **RAG HTTP + Agent HTTP + independent worker + both stdio MCP bridges**
+passed with SQLite and PostgreSQL. CI also built and exercised all three Docker
+Compose containers. Local PostgreSQL 16.2 checks passed separately. The
+[verification ledger](docs/IMPLEMENTATION_REVIEW.md) identifies the exact
+commits, service fixture, assertions, and remaining boundaries. Paid model
+quality and visual browser interaction have not been verified.
 
 Execution is **at least once**. A crash between a tool response and its checkpoint
 may repeat the call. Heartbeats, fencing, retry caps, and persisted deadlines

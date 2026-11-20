@@ -10,7 +10,7 @@ required. A defined CI job is not a recorded passing CI run.
 | Requirement | Implemented scope | Evidence and remaining boundary |
 | --- | --- | --- |
 | **AG-01 / L1 · Interface** | REST, minimal credential-in-memory UI, authenticated SSE with durable cursor, HMAC hooks with replay receipts | [Interface implementation](../agentic/interfaces.py); [platform checks](../tests/test_platform.py). Full interactive browser automation is not claimed. |
-| **AG-02 / L2 · Identity & Gateway** | Strong production credential maps, separate approvers, verified JWT/JWKS, named permissions, tenant/namespace attributes, local or Redis rate limits | Signed JWTs use an actual local JWKS HTTP server; invalid claims and role/tenant denial are exercised. Redis requires its real-service test. |
+| **AG-02 / L2 · Identity & Gateway** | Strong production credential maps, separate approvers, verified JWT/JWKS, named permissions, tenant/namespace attributes, local or Redis rate limits | Signed JWTs use an actual local JWKS HTTP server; invalid claims and role/tenant denial are exercised. Actual Redis 7.4.12 shared-limit/expiry checks passed in CI. |
 | **AG-03 / L3 · Control Plane** | Immutable agent/workflow/policy versions; policy intersection and resolved run snapshots | [Runtime tests](../tests/test_runtime_v02.py) check versions, snapshots, permitted namespaces, and denied tools. |
 | **AG-04 / L4 · Orchestration** | Durable checkpoints/cursors, renewable leases, fencing, absolute deadlines, cancellation guards, capped exception and lease-expiry retries | Recovery, stale completion, cancellation, heartbeat, exhaustion, and persisted deadlines are exercised in runtime/workflow tests. This is not deterministic history replay. |
 | **AG-05 / L5 · Agent Runtime** | Persisted plan/execute/evaluate/replan loop, bounded read-only tools, distinct stopping results | Refinement, successful arithmetic, insufficient evidence, checkpoint resume, and recovery after evaluation are tested. Lexical evidence acceptance is heuristic. |
@@ -18,13 +18,13 @@ required. A defined CI job is not a recorded passing CI run.
 | **AG-07 / L7 · Model Gateway** | Purpose routing, transient fallback, atomic reservation, output limits, provider usage reconciliation, operator-priced cost estimates | [Model tests](../tests/test_model_v02.py) run actual local HTTP provider fixtures, including concurrent reservations. These are not paid-model calls or quality tests. |
 | **AG-08 / L8 · Tool & Integration** | Typed arguments, execution-time policy checks, bounded fixed-endpoint RAG adapter, stdio MCP, approval-only artifacts | Unknown tools, unsafe arithmetic, cross-tenant retrieval, and role separation are checked. General code sandbox reports unavailable. |
 | **AG-09 / L9 · Knowledge & Memory** | Namespace/tenant memory CRUD, expiry, validated run provenance, bounded lexical recall | Isolation, TTL, provenance, and protected run/artifact access are tested. Vector retrieval remains in the companion RAGs service. |
-| **AG-10 / L10 · Persistence** | SQLite migration, PostgreSQL Store adapter, local/S3 artifacts, SQLite/Redis rate limits | Real PostgreSQL 16.2 Store and complete HTTP/MCP flows passed locally. Redis/S3 remain pending real-service execution for this revision. |
+| **AG-10 / L10 · Persistence** | SQLite migration, PostgreSQL Store adapter, local/S3 artifacts, SQLite/Redis rate limits | Real PostgreSQL 16.2 Store and complete HTTP/MCP flows passed locally. CI passed actual PostgreSQL 16.16, Redis 7.4.12, and S3-compatible MinIO checks, plus the PostgreSQL HTTP/MCP flow. |
 | **AG-11 / L11 · Governance** | Versioned policy maxima, distinct approval identity, same-JWT-subject self-approval denial, provider-secret checks, redacted event metadata | [Security tests](../tests/test_security.py), runtime tests, and platform tests. No managed secret vault or tamper-evident audit claim. |
 | **AG-12 / L12 · Observability & Quality** | Run/step/model metadata spans, OTLP HTTP export, operation metrics, usage records, task stopping outcomes | Actual local OTLP HTTP receiver obtains decoded traces with forbidden content absent. Synthetic outcome checks do not establish broad answer quality. |
 
 ## Executed verification
 
-| Verification | Local result | Scope |
+| Verification | Recorded result | Scope |
 | --- | --- | --- |
 | Core regression suite | **35 passed** | Existing workflow/security tests plus runtime, evidence, and gateway tests |
 | Request-body and cursor limits | **15 passed** | ASGI pre-parse size/total-deadline limits, no downstream execution on refusal, preserved disconnects, signed-64-bit event cursors |
@@ -33,13 +33,27 @@ required. A defined CI job is not a recorded passing CI run.
 | PostgreSQL Store test | **1 passed on PostgreSQL 16.2** | Two Store instances, exclusive claim, heartbeat, checkpoint visibility, completion, stale-result refusal |
 | Complete HTTP/MCP harness with SQLite | **Passed** | Actual RAG API, Agent API, independent worker, and both stdio MCP bridges |
 | Complete HTTP/MCP harness with PostgreSQL 16.2 | **Passed** | The same process-boundary workflow using a real PostgreSQL store |
+| CI ordinary suite and HTTP/MCP harness | **54 passed, 3 skipped; harness passed** | The three optional storage checks run in the separate external-service job |
+| CI external-service platform suite | **7 passed, no skips** | Actual PostgreSQL 16.16, Redis 7.4.12, and MinIO, plus the four common platform checks |
+| CI HTTP/MCP harness with PostgreSQL 16.16 | **Passed** | Actual APIs, independent worker, durable PostgreSQL state, and both stdio MCP bridges |
 | Ruff and whitespace checks | **Passed** | `ruff check agentic tests --select E4,E7,E9,F`; `git diff --check` |
 | UI packaging and JavaScript syntax | **Passed** | Built wheel contains `agentic/static/index.html`; extracted JavaScript passes `node --check` |
 | README Mermaid syntax | **3 diagrams passed** | Mermaid 11.17.2 `parse` API with jsdom 26.1.0; an invalid control was rejected. Syntax validation only, without browser rendering. |
-| Redis shared limit/expiry | **Pending real-service execution** | Test skips unless `AGENT_TEST_REDIS_URL` is configured |
-| S3-compatible artifact isolation/integrity | **Pending real-service execution** | Test skips unless `AGENT_TEST_S3_ENDPOINT` and credentials are configured |
-| Docker Compose and external-storage CI jobs | **Defined; no passing run asserted here** | [.github/workflows/ci.yml](../.github/workflows/ci.yml) |
+| Redis shared limit/expiry | **Passed against actual Redis 7.4.12 in CI** | Two clients share a bucket; exhaustion and positive bounded TTL are asserted |
+| S3-compatible artifact isolation/integrity | **Passed against actual MinIO in CI** | Real bucket/object operations, cross-tenant denial, deliberate corruption rejection, and cleanup |
+| Docker Compose full stack | **Passed in CI** | Actual builds, provider environment wiring, all three containers, external HTTP ingestion and completed workflow |
 | Paid OpenAI/Anthropic calls; visual browser interaction | **Not executed** | Local protocol fixtures and served HTML checks do not verify these behaviors |
+
+Recorded [CI run 44799515210](https://github.com/MasterLKH180cm/agentic-system/actions/runs/44799515210)
+passed all three jobs for agent commit `dfb4f7960ad685a29aa8ac79a45bd84eeb379ca1`,
+with companion RAG implementation pinned to
+`aff48b3a53029a2febea0366055845f14b69bbfa`. The ordinary and external-platform
+counts overlap; they are not a combined unique-test count. The source-built
+S3 fixture pins official MinIO commit
+[`9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a`](https://github.com/minio/minio/tree/9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a)
+(`RELEASE.2025-10-15T17-29-55Z`) and Go 1.24.8. This is an actual object-store
+server, not a mocked S3 client. See the [workflow](../.github/workflows/ci.yml)
+for disposable service setup and cleanup.
 
 The complete harness checks six groups of behavior:
 
@@ -100,7 +114,7 @@ does not start PostgreSQL, Redis, S3, or an OTLP collector.
 | **AG-T05** Registry, policy, memory, provenance | Version/snapshot tests, namespace/tool policy tests, TTL and artifact-boundary tests | Memory recall is lexical |
 | **AG-T06** Real local provider HTTP, fallback, usage, budgets | `test_model_v02.py` | Provider responses are controlled fixtures; no model-quality conclusion |
 | **AG-T07** JWT, roles, hooks, SSE, rate limits | `test_platform.py` plus successful HTTP harness runs | Native UI is checked as served HTML, not an automated interactive sign-in flow |
-| **AG-T08** Actual optional service protocols | PostgreSQL Store test and full-process flow passed; Redis/S3 tests and CI jobs supplied | **Partially verified:** Redis/S3 still require actual successful service runs |
+| **AG-T08** Actual optional service protocols | PostgreSQL Store/full-process flow, Redis shared limits/expiry, and MinIO artifact isolation/integrity passed in the recorded CI run | Disposable single-service verification; no throughput, failover, or managed-cloud compatibility guarantee |
 | **AG-T09** Redaction and explicit outcomes | Trace payload inspection, bounded tool output, evaluator/runtime tests | Protected run records intentionally retain evidence and checkpoints |
 
 ## Findings addressed during self-review
@@ -134,6 +148,11 @@ does not start PostgreSQL, Redis, S3, or an OTLP collector.
   timeout failures cannot invoke downstream handlers. REST/SSE cursors fit the
   database's signed 64-bit range. The full TCP/SSE/MCP harness passed again after
   this middleware was installed.
+- **External-service fixture:** the initial MinIO registry image could not be
+  downloaded, so the CI fixture now builds a fixed official source commit with
+  its declared Go toolchain. The actual PostgreSQL/Redis/S3 tests and complete
+  PostgreSQL HTTP/MCP workflow then passed; no mocked storage result substitutes
+  for that service execution.
 
 ## Remaining boundaries
 
@@ -151,7 +170,8 @@ managed secrets, and tamper-evident auditing are outside this implementation.
 
 PostgreSQL shares durable state with serialized transactions; no `SKIP LOCKED`
 queue or performance/HA guarantee is asserted. Redis is only a rate-limit
-backend. S3 and Redis have implementations and executable real-service tests,
-but pending verification remains visible until actual runs pass. The supplied
+backend. S3 and Redis have passed their actual protocol tests in disposable CI
+services; production capacity, resilience, and managed-service deployments still
+need workload-specific verification. The supplied
 Compose deployment remains a localhost development baseline; advanced settings
 require explicit environment forwarding and optional extras.
