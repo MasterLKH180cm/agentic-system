@@ -36,7 +36,7 @@ return the following typed assessment, including for an empty authorized corpus.
 | `refusal_reason` | `null`, `no_candidates`, `below_admission_threshold`, `model_rejected`, or `context_budget_exhausted` |
 | `admission.policy_version` | Exactly `evidence-admission-v1` for this contract |
 | `admission.decision` | `accept`, `abstain`, or `unassessed` |
-| `admission.basis` | `no_candidates`, `ranked_unassessed`, `calibrated_reranker`, `model_review`, `structured_exact`, or `context_budget` |
+| `admission.basis` | `no_candidates`, `ranked_unassessed`, `calibrated_reranker`, `calibrated_answerability`, `model_review`, `structured_exact`, or `context_budget` |
 | `admission.profile_id` | Operator profile identifier or `null`; nonempty identifiers are bounded to 100 characters |
 | `admission.score`, `admission.threshold` | Finite JSON numbers or `null`; their meaning belongs to the identified scoring profile |
 | `admission.candidate_count`, `admission.accepted_count` | Nonnegative bounded integers; accepted count cannot exceed candidate count |
@@ -77,9 +77,10 @@ RAG owns scorer configuration and calibration:
 - `RAGS_ADMISSION_PROFILE` names an operator-controlled JSON file containing the
   profile ID, model and artifact hashes, calibration digest, threshold, windowing
   and aggregation settings.
-- The configured scorer is the actual FastEmbed
-  `BAAI/bge-reranker-v2-m3-int8` implementation. A lexical overlap heuristic, model
-  stub or guessed threshold is not an equivalent verified profile.
+- Scorers are the actual FastEmbed `BAAI/bge-reranker-v2-m3-int8` relevance model
+  and the separately profiled, pinned Qwen3-1.7B answerability model described in
+  the companion specification's calibration-only amendment. A lexical overlap
+  heuristic, model stub or guessed threshold is not an equivalent profile.
 
 Agent enforces the corresponding execution boundary:
 
@@ -94,8 +95,9 @@ Agent enforces the corresponding execution boundary:
   profiles or admission-policy overrides to `SearchArgs`.
 
 In `calibrated_required`, successful passage evidence must have an `accept`
-decision, `calibrated_reranker` basis and an allowlisted profile, with valid finite
-score/threshold metadata. `supported=true` alone is insufficient. A result whose
+decision, `calibrated_reranker` or `calibrated_answerability` basis and an
+allowlisted profile, with valid finite score/threshold metadata.
+`supported=true` alone is insufficient. A result whose
 only basis is `model_review` does not prove the calibrated gate ran. A valid
 `structured_exact` operation is a separate exact-evidence path described below.
 Unassessed or unapproved evidence in this mode fails the execution policy; it is
@@ -282,3 +284,24 @@ Execution order: commit both specifications -> implement -> run focused regressi
 tests and real HTTP/worker/MCP flows -> independent review -> fix findings ->
 publish the exact evidence and remaining limitations. Do not change an acceptance
 criterion to disguise an unavailable model, unrun service or failing quality case.
+
+## 9. Calibration-only companion amendment
+
+The first BGE calibration retained 23/24 positive cases but rejected 1/24 negative
+cases. The companion project preserves that failed profile and calibration
+report. Its held-out report was produced before a stop instruction arrived but
+remains unopened; no results informed this amendment. A second actual scorer,
+`Qwen/Qwen3-1.7B` at revision `70d244cc86ccca08cf5af4e1e306ecf908b1ad5e`, is
+specified before implementation, with a fixed source-only YES/NO instruction,
+CPU bfloat16 next-token logit difference, a 1,024-token complete-prompt limit,
+artifact identity and the original calibration objective. All original held-out
+quality targets remain unchanged; unsuccessful profiles remain labelled failed.
+
+`calibrated_answerability` is an explicit supporting model assessment and can
+therefore set `supported=true` when accepted. The accepted result must still
+match its allowlisted profile, report a finite score at or above threshold, and
+preserve candidate counts. Refusal is `below_admission_threshold`, with no usable
+citations. Treat this basis like calibrated relevance for bypassing only the
+query-to-source lexical-overlap veto; retain citation, numeric-claim and
+answer-to-source support validation. No model assessment makes unsafe evidence
+or an unsupported final answer trustworthy by itself.
