@@ -69,6 +69,13 @@ or malformed payloads, HTTP authentication failures, unavailable adapters and
 transport errors remain execution failures; do not convert them into knowledge
 refusals or silently substitute a different strategy.
 
+Research engines can legitimately exceed the previous 90-second HTTP timeout.
+Use an operator-selected `AGENT_RAG_TIMEOUT_SECONDS`, default 180 and bounded to
+1..360 finite seconds, for the complete RAG HTTP exchange. The durable worker's
+step/run deadline and cancellation still take precedence. Callers and planners
+cannot override this timeout; configure it above the RAG sidecar/client budgets
+when those are enabled.
+
 ## 3. Operator admission policy
 
 RAG owns scorer configuration and calibration:
