@@ -1,11 +1,13 @@
 """Pure PostgreSQL schema and parameter contracts; no database service required."""
+import json
 import re
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
 
 from agentic import postgres
-from agentic.store import SCHEMA
+from agentic.store import SCHEMA, BudgetExceeded, Store
 
 pytestmark = pytest.mark.unit
 ACCOUNTING = ("input_tokens", "output_tokens", "charged_tokens", "cost_microusd")
@@ -74,3 +76,43 @@ def test_schema_and_placeholder_translation_never_rewrites_bound_accounting_valu
     assert cursor.rowcount == 1
     assert calls == [("INSERT INTO model_usage(route,cost_microusd) VALUES(%s,%s)", values)]
     assert calls[0][1] is values
+
+
+def test_reservation_aggregates_have_distinct_mapping_labels_and_enforce_both_budgets(monkeypatch):
+    """Model PostgreSQL's duplicate default labels without needing its service."""
+    charges = [(40, 60)]
+
+    class Connection:
+        def execute(self, statement, parameters=()):
+            row = None
+            if statement.startswith("SELECT specification,status"):
+                row = {"specification": json.dumps({"max_model_tokens": 100, "max_cost_usd": 0.0001}),
+                       "status": "running"}
+            elif statement.startswith("SELECT COALESCE(SUM("):
+                # PostgreSQL names both unaliased expressions `coalesce`; dict_row
+                # would retain only the last value. Derive labels from the actual SQL.
+                aliases = re.findall(r"COALESCE\(SUM\([a-z_]+\),0\)(?:\s+AS\s+([a-z_]+))?",
+                                     statement, flags=re.IGNORECASE)
+                labels = [alias or "coalesce" for alias in aliases]
+                assert len(labels) == 2 and len(set(labels)) == 2, "Accounting result labels must be unique"
+                row = dict(zip(labels, (sum(tokens for tokens, _ in charges), sum(cost for _, cost in charges)), strict=True))
+            elif statement.startswith("INSERT INTO model_usage"):
+                charges.append((parameters[5], parameters[6]))
+            elif statement != "BEGIN IMMEDIATE" and not statement.startswith("INSERT INTO events"):
+                pytest.fail("Unexpected storage statement")
+            # A mapping-only row also prevents renewed dependence on column positions.
+            return SimpleNamespace(fetchone=lambda: row)
+
+    @contextmanager
+    def connect():
+        yield Connection()
+
+    store = object.__new__(Store)
+    monkeypatch.setattr(store, "connect", connect)
+    assert store.reserve_usage("tenant", "run", "route", "synthesis", 50, 30)
+    assert charges == [(40, 60), (50, 30)]
+    with pytest.raises(BudgetExceeded, match="Token reservation"):
+        store.reserve_usage("tenant", "run", "route", "synthesis", 11, 1)
+    with pytest.raises(BudgetExceeded, match="Cost reservation"):
+        store.reserve_usage("tenant", "run", "route", "synthesis", 1, 11)
+    assert charges == [(40, 60), (50, 30)]

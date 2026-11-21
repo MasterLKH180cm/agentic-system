@@ -2,7 +2,7 @@
 import os
 import re
 import uuid
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 import pytest
 
@@ -22,6 +22,7 @@ def database():
         pytest.fail("AGENT_TEST_POSTGRES_URL is required for selected PostgreSQL accounting tests")
     import psycopg
     from psycopg import sql
+    from psycopg.conninfo import conninfo_to_dict
 
     parsed = urlsplit(endpoint)
     if parsed.scheme not in {"postgres", "postgresql"}:
@@ -29,7 +30,8 @@ def database():
     schema = "accounting_test_" + uuid.uuid4().hex
     query = dict(parse_qsl(parsed.query, keep_blank_values=True))
     query["options"] = (query.get("options", "") + f" -c search_path={schema}").strip()
-    isolated = urlunsplit(parsed._replace(query=urlencode(query)))
+    isolated = urlunsplit(parsed._replace(query=urlencode(query, quote_via=quote)))
+    assert conninfo_to_dict(isolated)["options"] == query["options"]
     with psycopg.connect(endpoint, autocommit=True, connect_timeout=5) as admin:
         admin.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
         try:
@@ -50,6 +52,8 @@ def assert_large_accounting(store):
         Step(id="calculate", tool="math.calculate", args={"expression": "2+3"}),
     ])
     run_id = store.submit("tenant", workflow)["id"]
+    remaining = store.remaining_model_tokens("tenant", run_id, 12_000)
+    assert type(remaining) is int and remaining == 12_000
     route = ModelRoute("wide-cost", "anthropic", "fixture", "https://provider.invalid", "fixture-key",
                        input_cost_per_million=1_000_000, output_cost_per_million=1_000_000)
     reserved_cost = estimated_cost(route, 11_000, 1_000)

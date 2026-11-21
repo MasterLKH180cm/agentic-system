@@ -6,29 +6,30 @@ committed before this iteration's implementation. The comparison baseline is
 [testing-baseline.json](testing-baseline.json). Current measurements and
 production-file hashes are in [testing-results.json](testing-results.json).
 
-**Local core validation passes: 120 unit cases and 147 integration cases,
-267 unique cases with zero selected skips.** All 21 production Python modules
-remain in scope. Statement coverage is **2366/2686 = 88.09%** and branch
+**Local core validation passes: 121 unit cases and 147 integration cases,
+268 unique cases with zero selected skips.** All 21 production Python modules
+remain in scope. Statement coverage is **2365/2686 = 88.05%** and branch
 coverage is **870/1076 = 80.86%**, above the specification's separate **85%**
 and **75%** floors. No production coverage exclusions were introduced.
 
 The v0.2 and v0.3 real HTTP/worker/MCP scripts and the six-check SQLite
-resilience script also passed locally. **The eight-case real-browser gate has
-not passed locally**: Chromium startup is blocked by the environment's
-UNIX-socket restriction. Actual browser, PostgreSQL/Redis/S3, Compose, research
-and admission jobs remain required checks for this exact PR revision. Earlier
-successful runs do not substitute for those checks.
+resilience script also passed locally. The actual [Chromium job](https://github.com/MasterLKH180cm/agentic-system/actions/runs/44882624007/job/136781024206)
+passed **8/8 checks** on the first published test implementation; its JSON report,
+four screenshots and cleanup checks were inspected. The local Chromium attempt
+remains blocked by this environment's UNIX-socket restriction. Actual external
+resources, Compose, research and admission remain required for the exact PR
+revision; inspect its checks and artifacts for their final outcomes.
 
 ## Measured core results
 
 | Measurement | Baseline | Current local result |
 | --- | --- | --- |
-| Ordinary/core cases passed | 109, with 3 external checks skipped | 120 unit + 147 integration = 267 unique passes |
-| Collection scope | Historical ordinary suite | 272 cases: 267 core + 5 external |
-| Unit selection | No explicit per-case inventory | 120 selected; 152 deliberately deselected |
-| Core integration selection | No explicit per-case inventory | 147 selected; 125 deliberately deselected |
+| Ordinary/core cases passed | 109, with 3 external checks skipped | 121 unit + 147 integration = 268 unique passes |
+| Collection scope | Historical ordinary suite | 273 cases: 268 core + 5 external |
+| Unit selection | No explicit per-case inventory | 121 selected; 152 deliberately deselected |
+| Core integration selection | No explicit per-case inventory | 147 selected; 126 deliberately deselected |
 | Selected skips, xfails or xpasses | 3 resource skips in historical ordinary run | 0 in the split core gates |
-| Statement coverage | 2161/2667 = 81.03% | 2366/2686 = 88.09% |
+| Statement coverage | 2161/2667 = 81.03% | 2365/2686 = 88.05% |
 | Branch coverage | 725/1068 = 67.88% | 870/1076 = 80.86% |
 | Production Python files measured | Complete baseline package | All 21 current files |
 | Coverage exclusions | 0 | 0 |
@@ -82,9 +83,10 @@ real prerequisites and E2E evidence join in review.
 | Python booleans passed numeric route-price validation; extremely large integers could reach `math.isfinite` and raise the wrong error | [config.py](../agentic/config.py) checks exact numeric types and allowed range before finite conversion; valid zero prices remain valid | Invalid booleans, nonfinite/negative/out-of-range values, huge integers and valid price boundaries in [test_contracts_unit.py](../tests/test_contracts_unit.py) |
 | Provider usage validation was embedded in the response path | [reported_usage](../agentic/model.py) centralizes bounded integer validation and Anthropic cached-input accounting; incomplete/malformed usage retains the conservative reservation | Pure parser cases plus actual local HTTP cancellation, malformed/compressed/oversized responses, output limits and provider charges in [test_model_failures.py](../tests/test_model_failures.py) |
 | Valid token totals and microdollar charges could exceed PostgreSQL's 32-bit accounting columns | [postgres.py](../agentic/postgres.py) widens only `model_usage.input_tokens`, `output_tokens`, `charged_tokens` and `cost_microusd` to `BIGINT`; Store initialization migrates existing narrow columns in one serialized transaction | [test_postgres_schema.py](../tests/test_postgres_schema.py) verifies targeted, idempotent translation/migration and unchanged bound values. [test_postgres_accounting.py](../tests/test_postgres_accounting.py) requires actual fresh and legacy PostgreSQL schemas, preserved records and large reservations/settlements in CI |
+| PostgreSQL dictionary rows collapsed two unaliased `COALESCE` aggregates into one column | Reservation queries name token and cost totals separately and access them by name; aggregate integers are normalized consistently across backends | The first actual PostgreSQL CI run exposed the failure. Mapping-row budget checks and retained real PostgreSQL reservation, settlement and migration contracts cover the correction |
 | SQLite's transaction context did not itself close rate-limiter connections | [auth.py](../agentic/auth.py) combines explicit closing with transaction commit/rollback in initialization and requests | Local concurrency, rollover, hashed bucket storage, success/error cleanup and initialization-failure tests in [test_artifacts_local.py](../tests/test_artifacts_local.py) |
 | Store connection setup occurred before its cleanup-protected block | [store.py](../agentic/store.py) protects row-factory/PRAGMA initialization with the same rollback/close path | Setup-failure cleanup and actual concurrent SQLite persistence checks in [test_persistence_concurrency.py](../tests/test_persistence_concurrency.py) |
-| A shared UI cursor/controller let previous streams and fetches write into a newer workflow/credential view | [index.html](../agentic/static/index.html) gives views and streams explicit ownership; generation changes before abort, results are guarded after awaits, and old action finalizers cannot reset a newer action | [e2e_browser.py](../tests/e2e_browser.py) drives actual workflow, credential and submission switches, same-run reconnect, late status responses and late submissions. Real Chromium execution remains required in CI; local syntax/API fixture checks are not a browser pass |
+| A shared UI cursor/controller let previous streams and fetches write into a newer workflow/credential view | [index.html](../agentic/static/index.html) gives views and streams explicit ownership; generation changes before abort, results are guarded after awaits, and old action finalizers cannot reset a newer action | [e2e_browser.py](../tests/e2e_browser.py) drives actual workflow, credential and submission switches, same-run reconnect, late status responses and late submissions. Actual Chromium CI passed 8/8 ownership/workflow checks; local syntax/API fixture checks are recorded separately |
 
 The PostgreSQL migration deliberately leaves unrelated integer columns,
 quoted SQL text and bound values unchanged. Existing data and repeat startup
@@ -128,7 +130,7 @@ also confirmed cleanup of both created children and all temporary data.
 The existing [v0.2 gate](../tests/e2e_v02.py) passed its six lifecycle check
 groups, and [v0.3](../tests/e2e_v03.py) passed its three evidence/terminal-state
 groups again with SQLite. These check groups overlap some existing contracts;
-they are reported separately from the 267 pytest cases.
+they are reported separately from the 268 pytest cases.
 
 ## Browser evidence and remaining CI gates
 
@@ -152,7 +154,9 @@ and only screenshots created during that invocation.
 Local Chromium exists, but startup fails because UNIX sockets are prohibited
 in this execution environment; the managed-browser download also returned
 HTTP 403. The local browser report records **failure, 0/8 completed**, with
-services cleaned up. No screenshot or visual-interaction success is claimed.
+services cleaned up. That local run supplies no screenshot or visual-interaction success. The separate
+CI Chromium run did execute all eight checks, produce four screenshots and
+report zero page errors with cleanup completed.
 
 | Required current-revision CI gate | Evidence required before claiming completion |
 | --- | --- |
@@ -167,8 +171,11 @@ services cleaned up. No screenshot or visual-interaction success is claimed.
 
 The [CI workflow](../.github/workflows/ci.yml) provisions these resources and
 pins all Agent companion checkouts to RAG commit
-`c015d300ad183117b22f7329bd697ccd93287fcd`. At the time of this local review,
-the exact Agent PR checks are still pending. The earlier
+`c015d300ad183117b22f7329bd697ccd93287fcd`. The first remote execution exposed duplicate PostgreSQL aggregate labels and a
+fixture URL-encoding defect. Distinct SQL aggregate aliases preserve both token
+and cost totals; percent-encoded connection options preserve the disposable
+schema path. Both actual migration/accounting cases remain required on the
+corrected revision. The exact PR checks and artifacts record the final outcome. The earlier
 [v0.3 ledger](IMPLEMENTATION_REVIEW_V03.md) remains historical evidence.
 
 ## Reproduce the measurements

@@ -616,8 +616,8 @@ class Store:
             if row is None or row["status"] in {"failed", "completed", "cancelled"}:
                 raise LeaseLost("Model packing requires an active tenant workflow")
             specification = json.loads(row["specification"])
-            used = db.execute("SELECT COALESCE(SUM(charged_tokens),0) FROM model_usage WHERE tenant=? AND run_id=?",
-                              (tenant, run_id)).fetchone()[0]
+            used = int(db.execute("SELECT COALESCE(SUM(charged_tokens),0) FROM model_usage WHERE tenant=? AND run_id=?",
+                                  (tenant, run_id)).fetchone()[0])
             remaining = specification.get("max_model_tokens", default_limit) - used
             if remaining <= 0:
                 raise BudgetExceeded("Workflow model budget is exhausted")
@@ -639,10 +639,11 @@ class Store:
                     raise LeaseLost("Model request requires an active tenant workflow")
                 specification = json.loads(row["specification"])
                 usage = conn.execute(
-                    "SELECT COALESCE(SUM(charged_tokens),0),COALESCE(SUM(cost_microusd),0) "
+                    "SELECT COALESCE(SUM(charged_tokens),0) AS spent_tokens,"
+                    "COALESCE(SUM(cost_microusd),0) AS spent_cost "
                     "FROM model_usage WHERE tenant=? AND run_id=?", (tenant, run_id),
                 ).fetchone()
-                spent_tokens, spent_cost = usage[0], usage[1]
+                spent_tokens, spent_cost = int(usage["spent_tokens"]), int(usage["spent_cost"])
             else:
                 spent_tokens, spent_cost = 0, 0
             budget = specification.get("max_model_tokens", default_limit)

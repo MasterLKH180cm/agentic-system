@@ -463,10 +463,10 @@ REST API. MCP exposes no approval tool.
 
 ## Validation and limits
 
-The current local core suite passed **120 unit tests and 147 integration tests**:
-**267 unique cases, no selected skips**. Collection contains 272 cases; the
+The current local core suite passed **121 unit tests and 147 integration tests**:
+**268 unique cases, no selected skips**. Collection contains 273 cases; the
 five external-service cases are explicitly deselected from the local core gate.
-All **21 production Python modules** are included in coverage: **88.09% of
+All **21 production Python modules** are included in coverage: **88.05% of
 statements and 80.86% of branches**, with zero exclusions. The fixed minimums
 are **85% line coverage and 75% branch coverage**, checked separately.
 See the committed [test specification](docs/TEST_SPEC.md),
@@ -552,10 +552,12 @@ python tests/e2e_browser.py \
 The browser gate drives eight checks against actual APIs and an independent
 worker: success, refusal, authorization, separate approval, stream ownership,
 stale status/submission responses and credential lifetime. Missing Chromium
-fails the gate. Local Chromium startup is currently blocked by this execution
-environment's UNIX-socket restriction, so the local record is **failed, 0/8
-executed**. Required CI must supply the eight-case report and screenshots for
-the exact PR revision; no browser success is claimed from a syntax check.
+fails the gate. The actual [Chromium CI job](https://github.com/MasterLKH180cm/agentic-system/actions/runs/44882624007/job/136781024206)
+passed **8/8 checks**, including four captured screenshots and clean service/browser
+shutdown. This workspace's local browser attempt was blocked by UNIX-socket
+restrictions and remains recorded as **failed, 0/8**; it is not counted as an
+executed browser gate. Inspect the exact PR revision's checks for the final
+remote outcome.
 
 For the five actual PostgreSQL/Redis/S3 cases, install `.[postgres,storage]`,
 provision disposable services, and configure `AGENT_TEST_POSTGRES_URL`,

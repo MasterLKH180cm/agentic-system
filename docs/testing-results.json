@@ -1,23 +1,23 @@
 {
   "schema_version": "core-testing-results-v1",
-  "measured_at": "2026-11-21T07:52:57.761616+00:00",
+  "measured_at": "2026-11-21T08:05:00.640977+00:00",
   "scope": "complete production Python package; ordinary parent-process unit+integration; local execution",
   "cases": {
-    "collected": 272,
-    "unit_passed": 120,
+    "collected": 273,
+    "unit_passed": 121,
     "integration_passed": 147,
-    "core_unique_passed": 267,
+    "core_unique_passed": 268,
     "external_deselected": 5,
     "selected_skips": 0
   },
   "coverage": {
-    "covered_lines": 2366,
+    "covered_lines": 2365,
     "num_statements": 2686,
     "covered_branches": 870,
     "num_branches": 1076,
     "excluded_lines": 0,
     "files": 21,
-    "line_percent": 88.08637379002234,
+    "line_percent": 88.04914370811616,
     "branch_percent": 80.85501858736059
   },
   "production_sha256": {
@@ -38,7 +38,7 @@
     "agentic/runtime.py": "b42de6538d069e3b7a68dee79cd2438d725f40b85bae6049072dcfe055576197",
     "agentic/schemas.py": "7f2d0636892d943bedc65a7089f45bb06c0b531ad1f1431faf09d764288233ff",
     "agentic/storage_adapters.py": "f7985e29615d2f1b990a87ff086a3dd302ff7f03fdc0e230aa49c6f64039b06d",
-    "agentic/store.py": "c1128e65b56cad115b3d656832ff084b8d3d88f8432cffd61fdf617dd6081d8f",
+    "agentic/store.py": "da93616e7f7042254594842f7ea5c5bc391dde62e097786f3f0ffec70ac19c5e",
     "agentic/telemetry.py": "360f07c46be8264f0c55a5827adc35cc37f21c43d9cc7f7755d7e987c700a813",
     "agentic/tools.py": "016b9798798bb98397df8b251f236ecd0c0de4431eb7e2fb79c53e905813d6e8",
     "agentic/worker.py": "3fcd245ca2e39df5cf07c6620be8627b961dd31cae093952e1a0da07b1952c75"
@@ -365,14 +365,14 @@
       "percent_branches_covered_display": "73.47"
     },
     "agentic/worker.py": {
-      "covered_lines": 69,
+      "covered_lines": 68,
       "num_statements": 97,
-      "percent_covered": 66.4,
-      "percent_covered_display": "66.40",
-      "missing_lines": 28,
+      "percent_covered": 65.6,
+      "percent_covered_display": "65.60",
+      "missing_lines": 29,
       "excluded_lines": 0,
-      "percent_statements_covered": 71.1340206185567,
-      "percent_statements_covered_display": "71.13",
+      "percent_statements_covered": 70.10309278350516,
+      "percent_statements_covered_display": "70.10",
       "num_branches": 28,
       "num_partial_branches": 4,
       "covered_branches": 14,
