@@ -1,5 +1,6 @@
 """Real cryptographic, HTTP, streaming and optional datastore integration checks."""
 from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 import hashlib
 import hmac
@@ -193,6 +194,25 @@ def test_real_postgres_workflow_state_and_fencing():
         assert first.heartbeat(job)
         assert first.checkpoint(job, {"round": 1})
         assert second.get(tenant, run["id"])["steps"][0]["checkpoint"]["round"] == 1
+        reservation = first.reserve_usage(tenant, run["id"], "integration", "synthesis", 100, 1000)
+        ready = threading.Barrier(8)
+
+        def settle(index):
+            ready.wait(timeout=10)
+            store = first if index % 2 == 0 else second
+            store.settle_usage(reservation, input_tokens=index + 1, output_tokens=2,
+                              cost_microusd=index + 10)
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            list(pool.map(settle, range(8)))
+        record, = first.usage(tenant, run["id"])["calls"]
+        assert record["status"] == "reported"
+        assert record["charged_tokens"] == record["input_tokens"] + 2
+        assert record["cost_microusd"] == record["input_tokens"] + 9
+        second.settle_usage(reservation, input_tokens=99, output_tokens=99, cost_microusd=99)
+        assert first.usage(tenant, run["id"])["calls"] == [record]
+        events = [event for event in first.events(tenant, run["id"]) if event["type"] == "model_usage"]
+        assert len(events) == 1 and events[0]["payload"]["input_tokens"] == record["input_tokens"]
         assert first.complete(job, {"value": 5})
         assert not second.complete(job, {"value": 99})
         assert second.get(tenant, run["id"])["status"] == "completed"

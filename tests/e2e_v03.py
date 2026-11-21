@@ -20,6 +20,8 @@ import httpx
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from e2e_support import clean_environment
+
 
 ROOT = Path(__file__).resolve().parents[1]
 QUESTION = "What is the session timeout?"
@@ -88,7 +90,7 @@ def main():
         rag_url = external.rstrip("/") if external else f"http://127.0.0.1:{free_port()}"
         rag_key = os.getenv("AGENT_E2E_RAG_KEY", "disposable-rag-key")
         tenant = "e3-" + uuid.uuid4().hex[:12]
-        env = {key: value for key, value in os.environ.items() if not key.startswith(("AGENT_", "RAGS_"))}
+        env = clean_environment()
         env.update({
             "RAGS_ENV": "test", "RAGS_DB_PATH": directory + "/rags.db",
             "RAGS_KEYS_JSON": json.dumps({rag_key: tenant}),

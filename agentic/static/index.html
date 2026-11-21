@@ -9,15 +9,171 @@
 <section><h2>Inspect a workflow</h2><label for="run">Workflow ID</label><input id="run"><div class="row"><button id="refresh">Refresh status</button><button id="stream">Follow events</button><button id="stop">Stop following</button><button id="cancel">Cancel workflow</button></div><label for="step">Approval step ID</label><input id="step" placeholder="publish"><button id="approve">Approve step</button><button id="reject">Reject step</button><p class="muted">Approval requires a separate approver credential. Inspect the output before approving.</p></section>
 <p id="notice" role="status"></p><section><h2>Result</h2><pre id="result">No workflow loaded.</pre></section><section><h2>Events</h2><pre id="events"></pre></section><p><a href="/docs">API reference</a></p>
 <script>
-const byId=id=>document.getElementById(id);let controller=null;let lastEvent='';
-async function request(path,method='GET',body){const token=byId('token').value.trim();if(!token)throw Error('Enter a credential first.');const response=await fetch(path,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),cache:'no-store'});const result=await response.json();if(!response.ok)throw Error(result.detail||'Request failed.');return result;}
-function runPath(){const id=byId('run').value.trim();if(!id)throw Error('Enter a workflow ID.');return '/workflows/'+encodeURIComponent(id);}
-function action(id,handler){byId(id).addEventListener('click',async()=>{byId(id).disabled=true;byId('notice').textContent='';try{await handler();}catch(error){byId('notice').textContent=error.message;}finally{byId(id).disabled=false;}});}
-action('submit',async()=>{const result=await request('/workflows','POST',{goal:byId('goal').value,runtime_mode:byId('mode').value});byId('run').value=result.id;lastEvent='';byId('events').textContent='';byId('result').textContent=JSON.stringify(result,null,2);});
-action('refresh',async()=>{byId('result').textContent=JSON.stringify(await request(runPath()),null,2);});
-action('cancel',async()=>{byId('result').textContent=JSON.stringify(await request(runPath()+'/cancel','POST'),null,2);});
-for(const [id,approved]of [['approve',true],['reject',false]])action(id,async()=>{const step=byId('step').value.trim();if(!step)throw Error('Enter a step ID.');byId('result').textContent=JSON.stringify(await request(runPath()+'/approve/'+encodeURIComponent(step),'POST',{approved,reason:'Reviewed in workflow dashboard'}),null,2);});
-action('stop',async()=>{controller?.abort();controller=null;});
-action('stream',async()=>{controller?.abort();controller=new AbortController();const token=byId('token').value.trim();if(!token)throw Error('Enter a credential first.');const headers={Authorization:'Bearer '+token};if(lastEvent)headers['Last-Event-ID']=lastEvent;const response=await fetch(runPath()+'/events/stream',{headers,signal:controller.signal,cache:'no-store'});if(!response.ok)throw Error('Event stream refused ('+response.status+').');const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';try{while(true){const {done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});let index;while((index=buffer.indexOf('\n\n'))>=0){const event=buffer.slice(0,index);buffer=buffer.slice(index+2);for(const line of event.split('\n'))if(line.startsWith('id: '))lastEvent=line.slice(4);if(!event.startsWith(':'))byId('events').textContent=(byId('events').textContent+'\n'+event).slice(-64000);}}}catch(error){if(error.name!=='AbortError')throw error;}finally{reader.releaseLock();}});
-byId('run').addEventListener('input',()=>{lastEvent='';controller?.abort();});
+(() => {
+  const byId = id => document.getElementById(id);
+  const state = { generation: 0, cursor: '', stream: null };
+  const actions = new Map();
+
+  function context() {
+    return {
+      generation: state.generation,
+      runId: byId('run').value.trim(),
+      token: byId('token').value.trim(),
+    };
+  }
+
+  function isCurrent(owner) {
+    return owner.generation === state.generation &&
+      owner.runId === byId('run').value.trim() &&
+      owner.token === byId('token').value.trim();
+  }
+
+  function releaseAction(id, owner) {
+    if (actions.get(id) === owner) {
+      actions.delete(id);
+      byId(id).disabled = false;
+    }
+  }
+
+  function stopFollowing() {
+    const previous = state.stream;
+    // Revoke ownership before abort: a resolved read may still resume later.
+    state.stream = null;
+    if (previous) {
+      previous.controller.abort();
+      releaseAction('stream', previous);
+    }
+  }
+
+  function resetView() {
+    state.generation += 1;
+    stopFollowing();
+    for (const [id, owner] of actions) releaseAction(id, owner);
+    state.cursor = '';
+    byId('events').textContent = '';
+    byId('result').textContent = 'No workflow loaded.';
+    byId('notice').textContent = '';
+  }
+
+  async function request(owner, path, method = 'GET', body) {
+    if (!owner.token) throw Error('Enter a credential first.');
+    const response = await fetch(path, {
+      method,
+      headers: { Authorization: 'Bearer ' + owner.token, 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      cache: 'no-store',
+    });
+    const result = await response.json();
+    if (!response.ok) throw Error(result.detail || 'Request failed.');
+    return result;
+  }
+
+  function runPath(owner) {
+    if (!owner.runId) throw Error('Enter a workflow ID.');
+    return '/workflows/' + encodeURIComponent(owner.runId);
+  }
+
+  function showResult(owner, result) {
+    if (isCurrent(owner)) byId('result').textContent = JSON.stringify(result, null, 2);
+  }
+
+  function action(id, handler) {
+    byId(id).addEventListener('click', async () => {
+      const owner = context();
+      actions.set(id, owner);
+      byId(id).disabled = true;
+      byId('notice').textContent = '';
+      try {
+        await handler(owner);
+      } catch (error) {
+        if (isCurrent(owner) && error.name !== 'AbortError') byId('notice').textContent = error.message;
+      } finally {
+        releaseAction(id, owner);
+      }
+    });
+  }
+
+  action('submit', async owner => {
+    resetView();
+    byId('run').value = '';
+    Object.assign(owner, context());
+    actions.set('submit', owner);
+    byId('submit').disabled = true;
+    const result = await request(owner, '/workflows', 'POST', {
+      goal: byId('goal').value,
+      runtime_mode: byId('mode').value,
+    });
+    if (!isCurrent(owner)) return;
+    byId('run').value = result.id;
+    owner.runId = result.id;
+    showResult(owner, result);
+  });
+
+  action('refresh', async owner => {
+    showResult(owner, await request(owner, runPath(owner)));
+  });
+
+  action('cancel', async owner => {
+    showResult(owner, await request(owner, runPath(owner) + '/cancel', 'POST'));
+  });
+
+  for (const [id, approved] of [['approve', true], ['reject', false]]) {
+    action(id, async owner => {
+      const step = byId('step').value.trim();
+      if (!step) throw Error('Enter a step ID.');
+      const result = await request(owner, runPath(owner) + '/approve/' + encodeURIComponent(step), 'POST', {
+        approved,
+        reason: 'Reviewed in workflow dashboard',
+      });
+      showResult(owner, result);
+    });
+  }
+
+  action('stop', async () => stopFollowing());
+
+  action('stream', async owner => {
+    stopFollowing();
+    const path = runPath(owner) + '/events/stream';
+    if (!owner.token) throw Error('Enter a credential first.');
+    owner.controller = new AbortController();
+    state.stream = owner;
+    const ownsStream = () => state.stream === owner && isCurrent(owner);
+    const headers = { Authorization: 'Bearer ' + owner.token };
+    if (state.cursor) headers['Last-Event-ID'] = state.cursor;
+    let reader;
+    try {
+      const response = await fetch(path, { headers, signal: owner.controller.signal, cache: 'no-store' });
+      if (!ownsStream()) {
+        await response.body?.cancel();
+        return;
+      }
+      if (!response.ok) throw Error('Event stream refused (' + response.status + ').');
+      reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (ownsStream()) {
+        const { done, value } = await reader.read();
+        if (!ownsStream() || done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let index;
+        while ((index = buffer.indexOf('\n\n')) >= 0) {
+          const event = buffer.slice(0, index);
+          buffer = buffer.slice(index + 2);
+          for (const line of event.split('\n')) {
+            if (line.startsWith('id: ')) state.cursor = line.slice(4);
+          }
+          if (!event.startsWith(':')) {
+            byId('events').textContent = (byId('events').textContent + '\n' + event).slice(-64000);
+          }
+        }
+      }
+    } finally {
+      reader?.releaseLock();
+      if (state.stream === owner) state.stream = null;
+    }
+  });
+
+  byId('run').addEventListener('input', resetView);
+  byId('token').addEventListener('input', resetView);
+})();
 </script></body></html>

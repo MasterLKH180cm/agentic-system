@@ -66,7 +66,7 @@ def model_routes(provider: str, openai_key: str, anthropic_key: str) -> tuple[Mo
         if not key:
             raise ValueError("Configured model route requires an API key")
         prices = [entry.get("input_cost_per_million"), entry.get("output_cost_per_million")]
-        if any(p is not None and (not isinstance(p, (float, int)) or not math.isfinite(p) or not 0 <= p <= 1_000_000)
+        if any(p is not None and (type(p) not in (float, int) or not 0 <= p <= 1_000_000 or not math.isfinite(p))
                for p in prices):
             raise ValueError("Route prices must be finite nonnegative numbers")
         purposes = entry.get("purposes", ["planning", "synthesis", "evaluation"])

@@ -1,0 +1,318 @@
+{
+  "schema_version": 1,
+  "tests": {
+    "tests/test_evidence_v03.py::test_active_legacy_finished_success_is_reassessed_without_tool_replay": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_evidence_v03.py::test_answerability_acceptance_requires_explicit_support": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_evidence_v03.py::test_calibrated_answerability_obeys_profile_and_threshold": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_evidence_v03.py::test_complete_exact_observation_survives_bounded_passage_packing": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_evidence_v03.py::test_malformed_upstream_identity_is_not_retained": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_evidence_v03.py::test_no_evidence_dag_is_terminal_without_model_or_publication": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_evidence_v03.py::test_operator_policy_is_validated_and_snapshotted": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_evidence_v03.py::test_rag_timeout_covers_headers_and_entire_stream": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_evidence_v03.py::test_rag_total_timeout_configuration_is_bounded": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_evidence_v03.py::test_refusal_round_exhaustion_retains_typed_last_reason": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_evidence_v03.py::test_refusal_round_resumes_without_retrieval_replay_and_preserves_events": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_evidence_v03.py::test_refusal_sources_are_quarantined_and_independent_branch_survives": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_evidence_v03.py::test_reported_upstream_identity_is_bounded_and_event_safe": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_evidence_v03.py::test_required_admission_uses_profile_not_supported_true": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_evidence_v03.py::test_semantic_admission_skips_only_query_overlap_veto": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_evidence_v03.py::test_structured_zero_is_evidence_with_complete_provenance": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_evidence_v03.py::test_typed_contradictions_cannot_become_evidence": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_evidence_v03.py::test_uncalibrated_bases_reject_scoring_metadata": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_evidence_v03.py::test_zero_without_complete_bounded_provenance_is_rejected": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_limits.py::test_api_installs_body_limit_before_json_parsing": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_limits.py::test_chunked_body_without_content_length_stops_before_parser": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_limits.py::test_complete_body_at_limit_reaches_handler_once": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_limits.py::test_deadline_covers_total_intake_instead_of_resetting_each_chunk": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_limits.py::test_declared_oversize_does_not_read_body": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_limits.py::test_disconnect_during_intake_does_not_run_handler_or_send_response": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_limits.py::test_event_cursors_are_bounded_for_rest_and_sse": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_limits.py::test_invalid_or_conflicting_content_length_is_rejected": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_limits.py::test_lifespan_is_passed_through_without_body_reads": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_limits.py::test_replay_preserves_real_disconnect_for_streaming_response": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_limits.py::test_stalled_body_returns_single_timeout_before_handler": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_model_v02.py::test_authentication_failure_does_not_fallback": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_model_v02.py::test_budget_denial_happens_before_provider_request": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_model_v02.py::test_concurrent_reservations_cannot_overspend": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_model_v02.py::test_cost_budget_requires_configured_prices": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_model_v02.py::test_durable_planning_is_budgeted_and_idempotent": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_model_v02.py::test_missing_usage_is_never_counted_as_zero": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_model_v02.py::test_real_http_fallback_records_usage_and_output_caps": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_platform.py::test_hmac_replay_sse_cursor_and_dashboard": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_platform.py::test_otel_actual_http_export_has_no_content": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_platform.py::test_real_postgres_workflow_state_and_fencing": {
+      "layer": "integration",
+      "resources": [
+        "external",
+        "postgres"
+      ]
+    },
+    "tests/test_platform.py::test_real_redis_limits_are_shared_and_expiring": {
+      "layer": "integration",
+      "resources": [
+        "external",
+        "redis"
+      ]
+    },
+    "tests/test_platform.py::test_real_s3_artifacts_are_isolated_and_integrity_checked": {
+      "layer": "integration",
+      "resources": [
+        "external",
+        "s3"
+      ]
+    },
+    "tests/test_platform.py::test_shared_rate_limit_and_artifact_isolation": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_platform.py::test_verified_oidc_roles_attributes_and_wrong_claims": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_runtime_v02.py::test_bound_namespace_protects_results_events_duplicates_and_artifacts": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_runtime_v02.py::test_cancelled_run_rejects_all_worker_mutations": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_runtime_v02.py::test_dag_summary_rejects_missing_or_fabricated_citations": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_runtime_v02.py::test_evaluator_rejects_foreign_sources_numbers_and_wrong_arithmetic": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_runtime_v02.py::test_expired_leases_obey_attempt_limit": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_runtime_v02.py::test_loop_exhaustion_is_failed_with_explicit_result": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_runtime_v02.py::test_loop_refines_and_records_evidence": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_runtime_v02.py::test_loop_resumes_committed_observation_after_crash": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_runtime_v02.py::test_memory_tenant_namespace_ttl_and_provenance": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_runtime_v02.py::test_persisted_deadline_survives_reclaim_and_stops_run": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_runtime_v02.py::test_rag_response_stream_is_stopped_at_size_limit": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_runtime_v02.py::test_registry_versions_policy_intersection_and_snapshots": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_runtime_v02.py::test_resume_after_evaluation_does_not_duplicate_round": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_runtime_v02.py::test_separate_role_tokens_for_same_identity_cannot_self_approve": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_runtime_v02.py::test_summary_packs_complete_bounded_json_and_only_returns_cited_sources": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_runtime_v02.py::test_v01_migration_preserves_old_records_and_order": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_runtime_v02.py::test_worker_deadline_is_terminal": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_runtime_v02.py::test_worker_renews_lease_and_cancels_in_flight": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_security.py::test_distinct_rag_credentials_per_tenant": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_security.py::test_model_planner_rejects_unallowlisted_tool": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_security.py::test_reject_shared_rag_token_and_shared_approver_token": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_synthesis_v03.py::test_already_exhausted_execution_budget_is_not_relabelled_as_refusal": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_synthesis_v03.py::test_full_json_prompt_schema_framing_and_output_reserve_fit_budget": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_synthesis_v03.py::test_invalid_model_envelopes_never_become_success": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_synthesis_v03.py::test_model_refusal_is_persisted_once_without_generic_retry": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_synthesis_v03.py::test_no_usable_evidence_and_unfit_context_do_not_call_or_reserve_model": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_workflows.py::test_calculator_and_config_fail_closed": {
+      "layer": "unit",
+      "resources": []
+    },
+    "tests/test_workflows.py::test_dag_validation_and_tenant_isolation": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_workflows.py::test_fencing_and_recovery": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_workflows.py::test_human_approval_separate_role": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_workflows.py::test_parallel_dag_and_idempotency": {
+      "layer": "integration",
+      "resources": []
+    },
+    "tests/test_workflows.py::test_real_rag_tool_contract_via_mock_http": {
+      "layer": "integration",
+      "resources": []
+    }
+  }
+}

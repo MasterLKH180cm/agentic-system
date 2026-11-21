@@ -463,33 +463,130 @@ REST API. MCP exposes no approval tool.
 
 ## Validation and limits
 
-The v0.3 local suite passed **109 tests with 3 external-service checks skipped**.
-Separate actual Qwen admission and RAPTOR/LightRAG chains passed through real
-RAG/Agent HTTP services, an independent worker, REST/SSE and both MCP bridges.
-The [v0.3 review](docs/IMPLEMENTATION_REVIEW_V03.md) links those execution records;
-their fixtures establish integration behavior and do not establish model quality.
+The current local core suite passed **120 unit tests and 147 integration tests**:
+**267 unique cases, no selected skips**. Collection contains 272 cases; the
+five external-service cases are explicitly deselected from the local core gate.
+All **21 production Python modules** are included in coverage: **88.09% of
+statements and 80.86% of branches**, with zero exclusions. The fixed minimums
+are **85% line coverage and 75% branch coverage**, checked separately.
+See the committed [test specification](docs/TEST_SPEC.md),
+[measured results](docs/testing-results.json) and
+[testing/code-quality review](docs/TEST_REVIEW.md) for scope and evidence.
 
-```bash
-AGENT_ENV=test pytest -q
-ruff check agentic tests --select E4,E7,E9,F
-# Install the sibling RAGs package and MCP extras first:
-python tests/e2e_v02.py
-python tests/e2e_v03.py
+Every collected pytest case must have exactly one primary layer: `unit`,
+`integration` or `e2e`. The root [conftest.py](conftest.py) registers the options
+before argument parsing and rejects unclassified/conflicting cases. JSON
+inventories retain full node IDs, selected/deselected status and resource
+markers; JUnit records layer and resource properties. `--require-no-skips`
+fails selected skips, xfail/xpass and collection-time skips. A deliberately
+deselected resource is recorded separately from an executed test.
+
+```mermaid
+flowchart TD
+    Spec["Committed test specification"] --> Layers["Validate per-case test layers"]
+    Layers --> Unit["Unit contracts"]
+    Layers --> Integration["Local integration contracts"]
+    Unit --> Coverage{"Lines at least 85%; branches at least 75%?"}
+    Integration --> Coverage
+    Spec --> Ready{"Real service and browser prerequisites ready?"}
+    Ready -->|No| Fail["Fail the required gate"]
+    Ready -->|Yes| Real["External storage and process/browser E2E"]
+    Coverage -->|No| Fail
+    Coverage -->|Yes| Review["Review inventories, reports and artifacts"]
+    Real --> Review
 ```
 
-The historical [v0.2 CI run](https://github.com/MasterLKH180cm/agentic-system/actions/runs/44799515210)
-passed all three jobs. The ordinary suite reports **54 passed, 3 skipped**
-(35 core, 4 platform, and 15 request-body/cursor checks). The three optional
-storage checks run in the external-service job, where **all 7 platform tests
-passed without skips** against actual PostgreSQL 16.16, Redis 7.4.12, and a
-MinIO server built from fixed upstream source. These counts overlap.
+### Run unit and integration gates
 
-The full **RAG HTTP + Agent HTTP + independent worker + both stdio MCP bridges**
-passed with SQLite and PostgreSQL. CI also built and exercised all three Docker
-Compose containers. Local PostgreSQL 16.2 checks passed separately. The
-[v0.3 verification ledger](docs/IMPLEMENTATION_REVIEW_V03.md) identifies the current
-specification, service fixtures, assertions, and remaining boundaries. Paid model
-quality and visual browser interaction have not been verified.
+Run from this repository after checking out the tested RAGs companion as
+`../RAGs`. CI pins the companion revision in its
+[workflow](.github/workflows/ci.yml).
+
+```bash
+python -m pip install -e ".[dev,mcp,telemetry,e2e]" -e "../RAGs[mcp]"
+export AGENT_ENV=test RAGS_ENV=test
+
+python -m pytest -q -m unit --require-no-skips \
+  --test-inventory reports/testing/inventory-unit.json \
+  --junitxml reports/testing/junit-unit.xml \
+  --cov=agentic --cov-branch --cov-config=pyproject.toml \
+  --cov-report=json:reports/testing/coverage-unit.json
+
+python -m pytest -q -m "integration and not external" --require-no-skips \
+  --test-inventory reports/testing/inventory-integration.json \
+  --junitxml reports/testing/junit-integration.xml \
+  --cov=agentic --cov-branch --cov-config=pyproject.toml --cov-append \
+  --cov-report=json:reports/testing/coverage-core.json \
+  --cov-report=xml:reports/testing/coverage-core.xml \
+  --cov-report=html:reports/testing/coverage-html
+
+python scripts/check_coverage.py --report reports/testing/coverage-core.json
+ruff check agentic tests scripts conftest.py --select E4,E7,E9,F
+ruff check agentic --select B,RUF021
+```
+
+These commands combine the two parent-process suites. Independent workers,
+stdio MCP, browser JavaScript and external-service execution have separate
+evidence; their execution is not added to this Python coverage percentage.
+
+### Run real end-to-end gates
+
+The existing v0.2 and v0.3 HTTP/worker/MCP scripts passed again locally. The new
+resilience harness passed **all six checks** with SQLite: actual worker loss
+and lease recovery, in-flight cancellation fencing, SSE cursor reconnect,
+transient retry, retry exhaustion and a persisted step deadline. It starts real
+services with isolated fixture credentials, uses a fixed localhost fault proxy,
+and checks terminal state over HTTP/MCP without editing workflow SQL state.
+
+```bash
+python tests/e2e_v02.py
+python tests/e2e_v03.py
+python tests/e2e_resilience.py --report reports/testing/resilience-sqlite.json
+
+python -m playwright install --with-deps chromium
+python tests/e2e_browser.py \
+  --report reports/testing/browser.json \
+  --artifacts reports/testing/browser-artifacts
+```
+
+The browser gate drives eight checks against actual APIs and an independent
+worker: success, refusal, authorization, separate approval, stream ownership,
+stale status/submission responses and credential lifetime. Missing Chromium
+fails the gate. Local Chromium startup is currently blocked by this execution
+environment's UNIX-socket restriction, so the local record is **failed, 0/8
+executed**. Required CI must supply the eight-case report and screenshots for
+the exact PR revision; no browser success is claimed from a syntax check.
+
+For the five actual PostgreSQL/Redis/S3 cases, install `.[postgres,storage]`,
+provision disposable services, and configure `AGENT_TEST_POSTGRES_URL`,
+`AGENT_TEST_REDIS_URL`, `AGENT_TEST_S3_ENDPOINT` and the fixture AWS credentials
+shown in CI. Then run:
+
+```bash
+python -m pytest -q -m "integration and external" --require-no-skips \
+  --test-inventory reports/testing/inventory-storage.json \
+  --junitxml reports/testing/junit-storage.xml
+
+# Set this to a separately created disposable database for this harness.
+AGENT_E2E_POSTGRES_URL="${AGENT_E2E_POSTGRES_URL:?Set the disposable recovery database URL}" \
+  python tests/e2e_resilience.py --report reports/testing/resilience-postgres.json
+```
+
+CI provisions separate PostgreSQL databases for v0.2, v0.3 and resilience,
+retains all three Compose containers, and retains actual RAPTOR/LightRAG and
+frozen-profile admission chains. Review the exact PR revision's checks and artifacts for the remote outcome.
+Earlier execution records are retained in the
+[v0.3 ledger](docs/IMPLEMENTATION_REVIEW_V03.md); they do not replace current
+revision checks or the frozen RAG quality benchmark.
+
+This iteration also corrects concurrent usage settlement, boolean/oversized
+price validation, duplicated usage parsing, SQLite connection cleanup and
+browser asynchronous ownership. PostgreSQL's four model-usage accounting
+columns now use `BIGINT`, with a targeted migration for existing stores. The
+[review](docs/TEST_REVIEW.md#corrections-and-regression-evidence) maps each
+correction to its regression tests and identifies required external evidence.
+
+### Execution and quality boundaries
 
 Execution is **at least once**. A crash between a tool response and its checkpoint
 may repeat the call. Heartbeats, fencing, retry caps, and persisted deadlines
@@ -501,6 +598,13 @@ store with serialized advisory-lock transactions; throughput, fairness, and
 high-availability behavior need workload-specific validation. Redis supplies
 rate limits, not a task queue. No general code sandbox, vector-memory service,
 or tamper-evident audit ledger is claimed.
+
+The companion Qwen profile's frozen quality gates remain failed: **9/16**
+held-out unanswerable cases refused, with admitted hybrid Recall@3 falling from
+**0.85 to 0.70**. The profile remains disabled by default. Agent refusal,
+accounting and browser tests do not change those measurements. Citation and
+numeric support checks remain heuristic; paid-provider answer quality and
+production throughput/failover are outside these functional test results.
 
 Contribution rules are in [AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md).
 Licensed under the [MIT License](LICENSE).

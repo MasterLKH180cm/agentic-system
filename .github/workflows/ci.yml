@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 6ab1abf0fbf2062df8663eedb8fa8700864bef74 # exact companion v0.3 implementation commit
+          ref: c015d300ad183117b22f7329bd697ccd93287fcd # exact companion v0.3 implementation commit
           path: external/RAGs
       - uses: actions/setup-python@v5
         with:
@@ -44,13 +44,46 @@ jobs:
           python -m pip install -e ".[dev,mcp,telemetry]"
           python -m pip install -e "./external/RAGs[mcp]"
       - name: Static analysis
-        run: ruff check agentic tests --select E4,E7,E9,F
-      - name: Integration tests
-        run: pytest -q
+        run: |
+          ruff check agentic tests scripts conftest.py --select E4,E7,E9,F
+          ruff check agentic --select B,RUF021
+      - name: Unit contracts with explicit inventory
+        run: >-
+          python -m pytest -q -m unit --require-no-skips
+          --test-inventory reports/testing/inventory-unit.json
+          --junitxml reports/testing/junit-unit.xml
+          --cov=agentic --cov-branch --cov-config=pyproject.toml --cov-report=json:reports/testing/coverage-unit.json
+      - name: Integration contracts without optional external resources
+        run: >-
+          python -m pytest -q -m "integration and not external" --require-no-skips
+          --test-inventory reports/testing/inventory-integration.json
+          --junitxml reports/testing/junit-integration.xml
+          --cov=agentic --cov-branch --cov-config=pyproject.toml --cov-append
+          --cov-report=json:reports/testing/coverage-core.json
+          --cov-report=xml:reports/testing/coverage-core.xml
+          --cov-report=html:reports/testing/coverage-html
+      - name: Enforce complete-package line and branch floors
+        run: python scripts/check_coverage.py
+      - name: Publish test inventory, JUnit and coverage evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agentic-core-test-evidence
+          path: reports/testing/
+          if-no-files-found: error
       - name: v0.2 lifecycle, bounded runtime, approvals, artifacts and MCP
         run: python tests/e2e_v02.py
       - name: v0.3 evidence decisions, terminal outcomes and MCP
         run: python tests/e2e_v03.py
+      - name: Real process-loss, cancellation, retry and SSE recovery
+        run: python tests/e2e_resilience.py --report reports/testing/resilience-sqlite.json
+      - name: Publish SQLite process recovery evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-sqlite-resilience
+          path: reports/testing/resilience-sqlite.json
+          if-no-files-found: error
       - name: Real two-service end-to-end smoke test
         shell: bash
         run: |
@@ -109,7 +142,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 6ab1abf0fbf2062df8663eedb8fa8700864bef74 # companion v0.3
+          ref: c015d300ad183117b22f7329bd697ccd93287fcd # companion v0.3
           path: external/RAGs
       - name: Put the sibling RAGs build context in place
         run: |
@@ -231,7 +264,6 @@ jobs:
       AGENT_ENV: test
       RAGS_ENV: test
       AGENT_TEST_POSTGRES_URL: postgresql://agenttest:disposable-ci-password@127.0.0.1:5432/agenttest
-      AGENT_E2E_POSTGRES_URL: postgresql://agenttest:disposable-ci-password@127.0.0.1:5432/agenttest
       AGENT_TEST_REDIS_URL: redis://127.0.0.1:6379/0
       AGENT_TEST_S3_ENDPOINT: http://127.0.0.1:9000
       AWS_ACCESS_KEY_ID: agent-test-user
@@ -243,7 +275,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 6ab1abf0fbf2062df8663eedb8fa8700864bef74 # companion v0.3
+          ref: c015d300ad183117b22f7329bd697ccd93287fcd # companion v0.3
           path: external/RAGs
       - uses: actions/setup-python@v5
         with:
@@ -287,11 +319,39 @@ jobs:
           done
           curl -fsS --max-time 2 http://127.0.0.1:9000/minio/health/ready
       - name: Actual external service contracts
-        run: pytest -q tests/test_platform.py
+        run: >-
+          python -m pytest -q tests/test_platform.py tests/test_postgres_accounting.py -m external --require-no-skips
+          --test-inventory reports/testing/inventory-storage.json
+          --junitxml reports/testing/junit-storage.xml
+      - name: Create isolated PostgreSQL databases for each E2E harness
+        run: |
+          python - <<'PYTHON'
+          import os
+          import psycopg
+          from psycopg import sql
+          with psycopg.connect(os.environ["AGENT_TEST_POSTGRES_URL"], autocommit=True) as connection:
+              for name in ("agentv02", "agentv03", "agentrecovery"):
+                  connection.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+          PYTHON
       - name: Full API and worker flow using PostgreSQL
+        env:
+          AGENT_E2E_POSTGRES_URL: postgresql://agenttest:disposable-ci-password@127.0.0.1:5432/agentv02
         run: python tests/e2e_v02.py
       - name: v0.3 evidence decisions and MCP using PostgreSQL
+        env:
+          AGENT_E2E_POSTGRES_URL: postgresql://agenttest:disposable-ci-password@127.0.0.1:5432/agentv03
         run: python tests/e2e_v03.py
+      - name: Real process-loss and cancellation recovery using PostgreSQL
+        env:
+          AGENT_E2E_POSTGRES_URL: postgresql://agenttest:disposable-ci-password@127.0.0.1:5432/agentrecovery
+        run: python tests/e2e_resilience.py --report reports/testing/resilience-postgres.json
+      - name: Publish actual storage and recovery evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-postgres-redis-s3-evidence
+          path: reports/testing/
+          if-no-files-found: error
       - name: Capture object-store diagnostics on failure
         if: failure()
         run: tail -n 100 "$RUNNER_TEMP/agentic-minio.log" || true
@@ -321,7 +381,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 6ab1abf0fbf2062df8663eedb8fa8700864bef74 # companion v0.3
+          ref: c015d300ad183117b22f7329bd697ccd93287fcd # companion v0.3
           path: external/RAGs
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -373,7 +433,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 6ab1abf0fbf2062df8663eedb8fa8700864bef74 # companion v0.3
+          ref: c015d300ad183117b22f7329bd697ccd93287fcd # companion v0.3
           path: external/RAGs
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -440,3 +500,39 @@ jobs:
         with:
           name: agent-frozen-admission-http
           path: reports/ci-agent-admission-http-v03.json
+
+  browser:
+    name: Actual Chromium workflow and stream ownership
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      AGENT_ENV: test
+      RAGS_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout the exact RAGs companion
+        uses: actions/checkout@v4
+        with:
+          repository: MasterLKH180cm/RAGs
+          ref: c015d300ad183117b22f7329bd697ccd93287fcd # exact companion implementation
+          path: external/RAGs
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install both services and pinned browser driver
+        run: python -m pip install -e ".[dev,mcp,telemetry,e2e]" -e "./external/RAGs[mcp]"
+      - name: Provision actual Chromium and its system dependencies
+        run: python -m playwright install --with-deps chromium
+      - name: Drive the actual UI, APIs and independent worker
+        run: >-
+          python tests/e2e_browser.py --report reports/testing/browser.json
+          --artifacts reports/testing/browser-artifacts
+      - name: Publish browser outcomes and screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-real-browser-evidence
+          path: reports/testing/
+          if-no-files-found: error

@@ -1,4 +1,5 @@
 """Tenant principals, verified OIDC JWTs, role/scope checks and shared limits."""
+from contextlib import closing
 from dataclasses import dataclass, field
 import hashlib
 import hmac
@@ -49,7 +50,7 @@ class RateLimiter:
                 raise ValueError("Configured Redis rate limiter is unavailable") from exc
         else:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
-            with sqlite3.connect(path, timeout=5) as db:
+            with closing(sqlite3.connect(path, timeout=5)) as db, db:
                 db.execute("CREATE TABLE IF NOT EXISTS request_limits (bucket TEXT PRIMARY KEY, "
                            "window INTEGER NOT NULL, requests INTEGER NOT NULL)")
 
@@ -63,7 +64,7 @@ class RateLimiter:
                 return int(self.redis.eval(script, 1, f"agent:limit:{window}:{digest}")) <= self.limit
             except Exception as exc:
                 raise HTTPException(503, "Rate limiter unavailable") from exc
-        with sqlite3.connect(self.path, timeout=5) as db:
+        with closing(sqlite3.connect(self.path, timeout=5)) as db, db:
             db.execute("BEGIN IMMEDIATE")
             db.execute("DELETE FROM request_limits WHERE window<?", (window - 2,))
             db.execute("INSERT INTO request_limits(bucket,window,requests) VALUES(?,?,1) "

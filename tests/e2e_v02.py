@@ -17,6 +17,8 @@ import time
 
 import httpx
 
+from e2e_support import clean_environment
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -33,7 +35,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="agentic-v02-e2e-") as directory, ExitStack() as stack:
         rag_port, agent_port = free_port(), free_port()
         rag_url, agent_url = f"http://127.0.0.1:{rag_port}", f"http://127.0.0.1:{agent_port}"
-        env = {k: v for k, v in os.environ.items() if not k.startswith(("RAGS_", "AGENT_"))}
+        env = clean_environment()
         hook_secret = "disposable-test-webhook-secret-32-chars"
         env.update({
             "RAGS_ENV": "test", "RAGS_DB_PATH": directory + "/rags.db",

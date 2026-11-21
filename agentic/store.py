@@ -119,6 +119,9 @@ class Store:
                 conn.execute("UPDATE steps SET ordinal=rowid")
             if "deadline_at" not in step_columns:
                 conn.execute("ALTER TABLE steps ADD COLUMN deadline_at REAL")
+            if self.is_postgres:
+                from agentic.postgres import migrate_accounting
+                migrate_accounting(conn)
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
@@ -128,12 +131,12 @@ class Store:
                 yield conn
             return
         conn = sqlite3.connect(self.path, timeout=20)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys=ON")
-        conn.execute("PRAGMA busy_timeout=20000")
-        if self.path != ":memory:":
-            conn.execute("PRAGMA journal_mode=WAL")
         try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.execute("PRAGMA busy_timeout=20000")
+            if self.path != ":memory:":
+                conn.execute("PRAGMA journal_mode=WAL")
             yield conn
             conn.commit()
         except BaseException:
@@ -664,6 +667,9 @@ class Store:
         output_tokens: int | None = None, cost_microusd: int | None = None, status: str = "reported",
     ) -> None:
         with self.connect() as conn:
+            # The reserved-state check, final charge and event are one transition.
+            # Retried or concurrent settlement must preserve the first result.
+            conn.execute("BEGIN IMMEDIATE")
             row = conn.execute("SELECT * FROM model_usage WHERE id=?", (reservation,)).fetchone()
             if not row or row["status"] != "reserved":
                 return

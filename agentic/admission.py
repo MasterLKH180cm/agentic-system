@@ -186,8 +186,8 @@ def require_admission(assessment: dict, structured: dict | None, policy: str, pr
         raise ValueError("Successful query has no usable evidence")
     if policy == "calibrated_required" and not (
         gate["decision"] == "accept" and (
-            gate["basis"] == "structured_exact" and structured is not None
-            or gate["basis"] in {"calibrated_reranker", "calibrated_answerability"} and gate["profile_id"] in profiles
+            (gate["basis"] == "structured_exact" and structured is not None)
+            or (gate["basis"] in {"calibrated_reranker", "calibrated_answerability"} and gate["profile_id"] in profiles)
         )
     ):
         raise PermissionError("RAG evidence does not satisfy the snapshotted admission policy")

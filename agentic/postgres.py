@@ -4,9 +4,11 @@ Transactions use a database-local advisory lock to preserve the existing
 serialized queue semantics across hosts. Tool execution happens outside it.
 This is a correctness-first backend, not a high-throughput SKIP LOCKED queue.
 """
-from contextlib import contextmanager
 import re
 import sqlite3
+from contextlib import contextmanager
+
+ACCOUNTING_COLUMNS = ("input_tokens", "output_tokens", "charged_tokens", "cost_microusd")
 
 
 class Row(dict):
@@ -39,7 +41,29 @@ class Cursor:
 def translate_schema(schema: str) -> str:
     schema = schema.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "BIGSERIAL PRIMARY KEY")
     # Epoch seconds cannot be stored in PostgreSQL's 32-bit REAL without losing lease precision.
-    return re.sub(r"\bREAL\b", "DOUBLE PRECISION", schema)
+    schema = re.sub(r"\bREAL\b", "DOUBLE PRECISION", schema)
+
+    def widen_accounting(match):
+        # Only this known table's declarations change; quoted SQL literals stay intact.
+        fragments = re.split(r"('(?:''|[^'])*')", match.group())
+        for index in range(0, len(fragments), 2):
+            for column in ACCOUNTING_COLUMNS:
+                fragments[index] = re.sub(rf"(\b{column}\s+)INTEGER\b", r"\1BIGINT", fragments[index], flags=re.IGNORECASE)
+        return "".join(fragments)
+
+    return re.sub(r"^[ \t]*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?model_usage\s*\([^;]+\)",
+                  widen_accounting, schema, flags=re.IGNORECASE | re.MULTILINE)
+
+
+def migrate_accounting(connection) -> None:
+    """Widen legacy accounting in the caller's serialized initialization transaction."""
+    types = {row["name"]: row["type"] for row in connection.execute("PRAGMA table_info(model_usage)")}
+    narrow = [column for column in ACCOUNTING_COLUMNS if types.get(column) == "integer"]
+    if narrow:
+        # One ALTER rewrites the table once and preserves all records/constraints.
+        connection.execute("ALTER TABLE model_usage " + ", ".join(
+            f"ALTER COLUMN {column} TYPE BIGINT" for column in narrow
+        ))
 
 
 def bind_parameters(sql: str) -> str:

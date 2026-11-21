@@ -16,6 +16,27 @@ def estimated_cost(route: ModelRoute, input_tokens: int, output_tokens: int) -> 
     return math.ceil(input_tokens * route.input_cost_per_million + output_tokens * route.output_cost_per_million)
 
 
+def reported_usage(provider: str, usage: object) -> tuple[int, int] | None:
+    """Validate provider counters, including Anthropic cached input tokens.
+
+    Incomplete or malformed usage cannot replace a conservative reservation.
+    Boolean counters are invalid even though Python treats them as integers.
+    """
+    if not isinstance(usage, dict):
+        return None
+    names = ("prompt_tokens", "completion_tokens") if provider == "openai" else (
+        "input_tokens", "output_tokens"
+    )
+    input_tokens, output_tokens = (usage.get(name) for name in names)
+    cached = () if provider == "openai" else (
+        usage.get("cache_read_input_tokens", 0), usage.get("cache_creation_input_tokens", 0)
+    )
+    if not all(type(value) is int and 0 <= value <= 2_000_000_000
+               for value in (input_tokens, output_tokens, *cached)):
+        return None
+    return input_tokens + sum(cached), output_tokens
+
+
 class ModelGateway:
     def __init__(self, config: Settings, store: Store | None = None):
         self.config = config
@@ -103,18 +124,8 @@ class ModelGateway:
                     if len(response.content) > 1_000_000:
                         raise ValueError("Model response exceeds size limit")
                     data = response.json()
-                    usage = data.get("usage", {})
-                    names = ("prompt_tokens", "completion_tokens") if route.provider == "openai" else (
-                        "input_tokens", "output_tokens"
-                    )
-                    counts = [usage.get(name) for name in names] if isinstance(usage, dict) else [None, None]
-                    reported = all(type(value) is int and 0 <= value <= 2_000_000_000 for value in counts)
-                    if reported and route.provider == "anthropic":
-                        cache = [usage.get("cache_read_input_tokens", 0), usage.get("cache_creation_input_tokens", 0)]
-                        reported = all(type(value) is int and 0 <= value <= 2_000_000_000 for value in cache)
-                        if reported:
-                            counts[0] += sum(cache)
-                    if reported:
+                    counts = reported_usage(route.provider, data.get("usage"))
+                    if counts is not None:
                         self.store.settle_usage(
                             reservation, input_tokens=counts[0], output_tokens=counts[1],
                             cost_microusd=estimated_cost(route, *counts), status="reported",
@@ -129,7 +140,7 @@ class ModelGateway:
                         raise ValueError("Model returned no text")
                     if len(text) > 32000:
                         raise ValueError("Model text exceeds the response limit")
-                    if reported and counts[1] > output_limit:
+                    if counts is not None and counts[1] > output_limit:
                         raise ValueError("Model exceeded its configured output token limit")
                     return text
                 except asyncio.CancelledError:

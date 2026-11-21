@@ -96,7 +96,7 @@ class EvidenceBundle:
 def is_refused(result: dict) -> bool:
     retrieval = result.get("retrieval", {})
     return (result.get("outcome") == "insufficient_evidence" or result.get("supported") is False
-            or isinstance(retrieval, dict) and retrieval.get("outcome") == "insufficient_evidence")
+            or (isinstance(retrieval, dict) and retrieval.get("outcome") == "insufficient_evidence"))
 
 
 def collect_evidence(inputs: dict, *, policy: str = "compatibility", profiles: list | tuple = ()) -> EvidenceBundle:
