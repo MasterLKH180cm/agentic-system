@@ -1,5 +1,8 @@
 # Agentic System v0.2 implementation review
 
+Historical v0.2 record. Current evidence handling and verification are in the
+[v0.3 review](IMPLEMENTATION_REVIEW_V03.md).
+
 This ledger compares the implemented revision with [SPEC_V02.md](SPEC_V02.md),
 which was committed before feature implementation. It separates source-backed
 behavior, executed checks, protocol fixtures, and external verification still

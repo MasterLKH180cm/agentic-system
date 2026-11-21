@@ -1,8 +1,9 @@
-# Agentic System v0.2 architecture
+# Agentic System v0.3 architecture
 
 This document describes the current implementation. The acceptance contract is
-[SPEC_V02.md](SPEC_V02.md); executed checks and unresolved verification are in
-[IMPLEMENTATION_REVIEW.md](IMPLEMENTATION_REVIEW.md).
+[SPEC_V03.md](SPEC_V03.md), extending [SPEC_V02.md](SPEC_V02.md). Current checks
+are in [IMPLEMENTATION_REVIEW_V03.md](IMPLEMENTATION_REVIEW_V03.md); the
+[v0.2 review](IMPLEMENTATION_REVIEW.md) remains a historical record.
 
 ## Service responsibilities
 
@@ -30,6 +31,8 @@ the baseline Compose environment does not forward every optional setting.
    token, and monetary maxima cannot be raised by a submitted definition.
 4. The resolved definition and policy are snapshotted with the run. Later
    registrations do not alter active work. Reusing a definition version fails.
+   This includes the RAG admission policy and allowed profile IDs; environment
+   changes cannot loosen a new-contract run's evidence policy during recovery.
 5. Idempotency and queue admission are checked before the new run is committed.
    The same key with different request content fails with `409`.
 
@@ -58,12 +61,44 @@ Recovery resumes committed progress; it does not replay a deterministic event
 history. A response received before a crash but not checkpointed may be repeated.
 The delivery guarantee remains at least once.
 
-The default evidence evaluator validates source identities and applies lexical
-overlap and numeric-support checks. Its acceptance is a heuristic outcome, not
-a semantic proof. Arithmetic evaluation separately recomputes the bounded
-expression. Failed evidence can trigger a refined query or a validated model
-replan, up to the snapshotted round limit. Insufficient evidence, budget,
-deadline, and policy stops are recorded as unsuccessful outcomes.
+The evidence evaluator validates source identities and applies answer/source
+overlap and numeric-support checks. Valid calibrated RAG admission bypasses only
+question/source lexical overlap. Refused evidence remains quarantined, including
+through nested merges and resumed checkpoints. Acceptance remains a heuristic
+outcome rather than a semantic proof. Arithmetic evaluation separately recomputes
+the bounded expression. Evidence refusal causes a recorded negative assessment
+and bounded refinement. On exhaustion the final result retains the last fixed
+refusal reason. Budget, deadline and policy stops remain distinct outcomes.
+
+## Retrieval and synthesis outcomes
+
+The authenticated RAG response carries a validated assessment under the
+`rag.search` result's `retrieval` field. An empty retrieval completes its tool
+operation so another independent branch can still contribute evidence. It does
+not create an extractive answer or usable citations. Refused source identifiers
+are quarantined before recursive evidence collection; copying them elsewhere
+does not restore trust.
+
+Compatibility normalizes genuine legacy replies as unassessed and honors an
+explicit legacy refusal. Malformed typed replies cannot use legacy fallback.
+Required mode needs calibrated acceptance, finite score/threshold and a
+snapshotted allowed profile ID. Exact structured operations use a separately
+validated aggregate and 1..20 dataset identities. Numeric zero is retained;
+missing source scope is not treated as a count over an authorized dataset.
+
+Synthesis first collects and validates evidence. With no usable source or exact
+observation it returns a typed refusal without a model reservation. Packing uses
+complete JSON objects and counts the system/schema instructions, UTF-8 input,
+framing and reserved output envelope. A model result must use the finite
+`outcome`, `answer`, `cited_ids`, `refusal_reason` JSON contract. Normal model
+refusal is not a retryable missing-citation exception; malformed output remains
+an execution failure.
+
+A final refusal has outer `outcome=insufficient_evidence`. Store completion
+persists that result and marks the step/workflow failed, preventing dependent
+publication. REST, authenticated SSE and MCP expose the same durable state.
+Events receive only validated enums, bounded counts, approved profile IDs and
+reported engine identity, without source bodies or arbitrary upstream trace.
 
 ## Authorization and effects
 
@@ -119,9 +154,9 @@ not a whole-system spending cap.
 | SQLite | WAL, transactions, migration of existing workflow columns | API and workers must share a local file/volume |
 | PostgreSQL | Same Store contract through bound SQL parameters; database-local advisory lock serializes transactions | Shared-state correctness verified; no `SKIP LOCKED` queue or throughput claim |
 | Local artifacts | Tenant-keyed paths, atomic writes, SHA-256 integrity check | Shared artifact storage required across readers/writers |
-| S3-compatible artifacts | Configured bucket, bounded requests, tenant-keyed object names, integrity verification | Requires `storage` extra; real-service verification remains pending |
+| S3-compatible artifacts | Configured bucket, bounded requests, tenant-keyed object names, integrity verification | Requires `storage` extra; actual S3-compatible CI service is tested, cloud deployment is separate |
 | SQLite rate limiter | Atomic fixed-minute counters shared through a local limiter file | A PostgreSQL workflow DSN does not make the default limiter distributed |
-| Redis rate limiter | Atomic shared counter/expiry through Redis | Rate limiting only; real-service verification remains pending |
+| Redis rate limiter | Atomic shared counter/expiry through Redis | Actual Redis CI service is tested; it is not a task queue |
 | OTLP HTTP | Optional safe-attribute traces, operation counts and duration metrics | Requires telemetry extra and a collector; export delivery depends on that collector |
 
 Configuration never silently substitutes SQLite for a configured PostgreSQL

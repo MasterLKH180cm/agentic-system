@@ -10,11 +10,13 @@ execute typed tools; the companion [RAGs](https://github.com/MasterLKH180cm/RAGs
 service owns document ingestion and retrieval. The local stack works without
 paid model credentials.
 
-Version 0.2 adds immutable definitions, policy snapshots, memory, renewable
+Version 0.3 preserves evidence refusals across retrieval, synthesis, loops,
+durable results, SSE and MCP, and snapshots the required RAG admission policy.
+It builds on v0.2's immutable definitions, policy snapshots, memory, renewable
 leases, model budgets, a small web UI, authenticated event streams, and optional
 identity, persistence, and telemetry adapters. See the
-[specification](docs/SPEC_V02.md) and
-[verification ledger](docs/IMPLEMENTATION_REVIEW.md) for the implementation
+[v0.3 specification](docs/SPEC_V03.md), [v0.2 specification](docs/SPEC_V02.md) and
+[v0.3 verification ledger](docs/IMPLEMENTATION_REVIEW_V03.md) for the implementation
 contract, executed checks, and remaining boundaries.
 
 ## Contents
@@ -24,6 +26,7 @@ contract, executed checks, and remaining boundaries.
 - [Quick start](#quick-start)
 - [Run a research workflow](#run-a-research-workflow)
 - [Agent loops and memory](#agent-loops-and-memory)
+- [Evidence decisions and refusal](#evidence-decisions-and-refusal)
 - [Parallel steps and approval](#parallel-steps-and-approval)
 - [Models and budgets](#models-and-budgets)
 - [Deployment configuration](#deployment-configuration)
@@ -36,20 +39,20 @@ Each row maps the original design to executable behavior. Optional integrations
 require their extras and configuration; implementation does not imply that every
 external service or production topology has been verified.
 
-| Layer | Implemented in v0.2 | Boundary |
+| Layer | Implemented behavior | Boundary |
 | --- | --- | --- |
 | **L1 · Interface** | [REST, web UI, resumable SSE, signed inbound hooks](agentic/interfaces.py) | UI accepts an existing credential; no interactive identity-provider sign-in |
 | **L2 · Identity & Gateway** | [Tenant credentials, verified JWT/JWKS, roles, scopes, namespace checks, rate limits](agentic/auth.py) | Redis is an optional rate-limit backend; TLS and identity-provider operations remain deployment responsibilities |
-| **L3 · Control Plane** | [Immutable agent/workflow/policy versions](agentic/control.py); resolved definitions and permissions snapshotted per run | Definitions can narrow operator policy, never grant additional authority |
+| **L3 · Control Plane** | [Immutable agent/workflow/policy versions](agentic/control.py); definitions, permissions and RAG admission/profile allowlists snapshotted per run | Definitions can narrow operator policy, never grant additional authority |
 | **L4 · Orchestration** | [Durable steps and loop checkpoints](agentic/store.py), fencing, heartbeats, retry caps, persisted deadlines, cancellation | At-least-once execution; no deterministic history-replay engine |
-| **L5 · Agent Runtime** | [Bounded planning, observation, evaluation, and refinement](agentic/runtime.py) alongside static DAGs | Evidence evaluation is lexical and heuristic; arithmetic has a separate bounded verifier |
+| **L5 · Agent Runtime** | [Bounded planning, observations, typed refusal, evaluation and refinement](agentic/runtime.py); committed observations survive recovery | Calibrated source admission bypasses only query-term overlap; final citation, number and source-support checks remain heuristic |
 | **L6 · Parallel Execution** | [Dependency-aware workers](agentic/worker.py), bounded concurrency and tenant queue admission | Loop substeps execute sequentially; no external task queue, priority scheduler, or autoscaler |
-| **L7 · Model Gateway** | [Purpose routes, transient fallback, reservations, usage reconciliation, output caps](agentic/model.py) | Gateway budgets cover agent planning/synthesis; RAGs and other external costs are separate |
+| **L7 · Model Gateway** | [Purpose routes, transient fallback, reservations, usage reconciliation, full JSON prompt/output caps](agentic/model.py) | Gateway budgets cover agent planning/synthesis; RAGs and other external costs are separate |
 | **L8 · Tool & Integration** | [Typed tool registry](agentic/tools.py), fixed RAG endpoint, [stdio MCP](agentic/mcp_server.py) | Adaptive loops use read-only tools; arbitrary-code sandbox is explicitly unavailable |
-| **L9 · Knowledge & Memory** | [Tenant/namespace memory](agentic/memory.py), CRUD, TTL, provenance, bounded recall; cited retrieval through RAGs | Memory search is lexical; vector indexes belong to RAGs |
+| **L9 · Knowledge & Memory** | [Tenant/namespace memory](agentic/memory.py), CRUD, TTL and provenance; typed RAG decisions, refused-source quarantine and exact structured zero | Memory search is lexical; vector indexes and calibrated model quality belong to RAGs |
 | **L10 · Persistence** | SQLite; [PostgreSQL adapter](agentic/postgres.py); [local/S3 artifacts](agentic/storage_adapters.py); optional Redis limits | PostgreSQL serializes transactions with an advisory lock; actual service tests do not establish throughput or high availability |
 | **L11 · Governance** | Versioned tool/namespace/budget policies, disjoint approvers, provider-secret validation, redacted event metadata | Events are append-only application records, not a tamper-evident audit system |
-| **L12 · Observability & Quality** | [Optional OTLP traces/metrics](agentic/telemetry.py), usage records, evaluator outcomes and regression tests | Protocol tests and synthetic outcomes do not establish general answer quality or paid-provider quality |
+| **L12 · Observability & Quality** | [Optional OTLP traces/metrics](agentic/telemetry.py), usage records, durable refusal reasons and terminal REST/SSE/MCP inspection | Protocol tests and synthetic outcomes do not establish general answer quality or paid-provider quality |
 
 ## Architecture
 
@@ -154,8 +157,11 @@ key with different content returns `409`. Run states are `queued`, `running`,
 
 Use `"runtime_mode":"agent_loop"` to checkpoint a plan, execute its read-only
 tools, evaluate the observations, and refine within a finite round limit.
-The default evidence evaluator checks known citation IDs, lexical relevance,
-source overlap, and unsupported numbers. It is not a semantic truth verifier.
+The evidence evaluator checks admitted source identity, source overlap and
+unsupported numbers. Valid calibrated admission can replace only its
+question-to-source lexical-overlap check. Refused evidence stays quarantined;
+neither a repeated citation ID nor an extractive answer can make it usable.
+These checks are not a semantic truth verifier.
 
 ```mermaid
 flowchart TD
@@ -208,6 +214,66 @@ curl --fail-with-body -sS 'http://127.0.0.1:8001/memory/default?q=session&limit=
 `GET` and `DELETE /memory/{namespace}/{id}` inspect or remove a record. Optional
 `source_run_id` records validated run provenance. Expired records are excluded
 from reads and recall. Search responses identify `search_type: lexical`.
+
+## Evidence decisions and refusal
+
+The RAG query's domain outcome and the tool execution outcome are separate.
+`rag.search` can execute successfully while returning
+`retrieval.outcome:"insufficient_evidence"`. Another independent retrieval
+branch can still supply admitted evidence. Refused observations contribute no
+source text or citations to synthesis, including inside nested `data.merge`
+results and recovered checkpoints.
+
+```mermaid
+flowchart TD
+    Search["Authenticated retrieval branches"] --> Check["Validate outcomes, profiles and source IDs"]
+    Check --> Accepted["Admitted evidence or exact values"]
+    Check --> Refused["Quarantine refused branches"]
+    Accepted --> Pack{"Usable evidence fits?"}
+    Refused --> Pack
+    Pack -->|No| Stop["Persist insufficient evidence; stop dependent work"]
+    Pack -->|Yes| Synthesize["Extract evidence or validate model JSON"]
+    Synthesize --> Decision{"Answer supported?"}
+    Decision -->|No| Stop
+    Decision -->|Yes| Complete["Persist answer and citations"]
+    Stop --> Inspect["REST, SSE and MCP terminal inspection"]
+    Complete --> Inspect
+```
+
+With no usable source or exact observation, synthesis refuses without making a
+model call or usage reservation. Its outer `outcome` is
+`insufficient_evidence`; the durable step/run becomes `failed`, and dependent
+publication does not execute. A model can also explicitly refuse through its
+validated JSON envelope. That refusal is a normal domain result, so it does
+not trigger a generic missing-citation retry. Transport failures, malformed
+model output, policy violations and evidence refusals remain distinguishable.
+
+The fixed refusal reasons are `no_candidates`, `below_admission_threshold`,
+`model_rejected` and `context_budget_exhausted`. Bounded agent loops record a
+negative assessment and refine within their round limit. On exhaustion they
+retain `outcome:insufficient_evidence`, `stop_reason:rounds_exhausted`, empty
+citations and the last validated refusal reason. Recovery resumes after the
+committed observation rather than retrieving again to reconstruct it.
+
+| Operator policy | Behavior |
+| --- | --- |
+| `AGENT_RAG_ADMISSION_POLICY=compatibility` | Legacy evidence remains explicitly unassessed; an explicit refusal still takes precedence |
+| `AGENT_RAG_ADMISSION_POLICY=calibrated_required` | Passage evidence must report a valid calibrated acceptance and an operator-allowlisted profile |
+| `AGENT_RAG_ADMISSION_PROFILE_IDS_JSON` | Required mode needs 1–32 unique profile IDs; the resolved allowlist is snapshotted in each new run |
+
+Calibrated bases are `calibrated_reranker` and `calibrated_answerability`.
+`supported:true` alone cannot satisfy required mode. The companion RAG service
+owns scorer artifacts, calibration and measured quality; selecting a profile
+does not establish that it passed its evaluation. Exact structured aggregates
+use a separate path with 1–20 validated dataset identities. A supported count
+of zero is useful evidence; an absent dataset or fabricated provenance is not.
+Finite arithmetic zero is also retained.
+
+The current companion Qwen profile **failed its frozen quality gates and is not enabled by default**: it refused 9/16 held-out unanswerable cases, and admitted hybrid Recall@3 fell from 0.85 to 0.70. See the [measured RAG report](https://github.com/MasterLKH180cm/RAGs/blob/feat/spec-driven-v02/reports/admission-verification-qwen-v03.json). Correct refusal propagation and an allowlisted profile ID do not establish model quality.
+
+Events expose only fixed outcome/reason/basis values, approved profile IDs,
+bounded counts and validated engine identity. New diagnostic metadata does not
+copy source text, questions, prompts or free-form upstream traces into events.
 
 ## Parallel steps and approval
 
@@ -334,6 +400,9 @@ Install optional adapters with
 | `AGENT_RAG_KEYS_JSON` | Tenant-to-RAG-token map; tokens must be distinct and mapped to the same tenants in RAGs |
 | `AGENT_OIDC_ISSUER`, `AGENT_OIDC_AUDIENCE`, `AGENT_OIDC_JWKS_URL` | Configure together for verified JWTs; issuer, audience, expiry, algorithm, role, and tenant are checked |
 | `AGENT_TENANT_POLICIES_JSON` | Operator maxima for tools, memory namespaces, steps, rounds, and model budgets |
+| `AGENT_RAG_ADMISSION_POLICY` | `compatibility` or `calibrated_required`, snapshotted for new workflows |
+| `AGENT_RAG_ADMISSION_PROFILE_IDS_JSON` | Required-policy profile allowlist, resolved and snapshotted with the run |
+| `AGENT_RAG_TIMEOUT_SECONDS` | Whole RAG HTTP exchange, default 180 seconds, finite range 1–360; durable worker deadlines still apply |
 | `AGENT_DATABASE_URL` | PostgreSQL DSN; otherwise `AGENT_DB_PATH` selects SQLite |
 | `AGENT_REDIS_URL` | Shared rate-limit counters; otherwise a local SQLite limiter is used |
 | `AGENT_ARTIFACT_BACKEND=s3`, `AGENT_S3_BUCKET` | S3 artifacts; optional `AGENT_S3_ENDPOINT` for a compatible service |
@@ -367,13 +436,13 @@ Compose read the basic provider/key switches it explicitly forwards, including
 `RAGS_EMBEDDING_PROVIDER`, `RAGS_MODEL_PROVIDER`, and `AGENT_MODEL_PROVIDER`.
 Apply changes with `docker compose up -d --build --wait`.
 
-Advanced v0.2 variables require an explicit Compose override or deployment
+Advanced variables require an explicit Compose override or deployment
 environment; adding them to `.env` alone does not forward them to containers.
 Optional image dependencies can be built with:
 
 ```bash
 docker build --build-arg AGENT_EXTRAS=mcp,postgres,storage,telemetry \
-  -t agentic-system:v0.2 .
+  -t agentic-system:v0.3 .
 ```
 
 The default image includes `mcp`. Public deployments also need TLS, appropriate
@@ -394,14 +463,21 @@ REST API. MCP exposes no approval tool.
 
 ## Validation and limits
 
+The v0.3 local suite passed **109 tests with 3 external-service checks skipped**.
+Separate actual Qwen admission and RAPTOR/LightRAG chains passed through real
+RAG/Agent HTTP services, an independent worker, REST/SSE and both MCP bridges.
+The [v0.3 review](docs/IMPLEMENTATION_REVIEW_V03.md) links those execution records;
+their fixtures establish integration behavior and do not establish model quality.
+
 ```bash
 AGENT_ENV=test pytest -q
 ruff check agentic tests --select E4,E7,E9,F
 # Install the sibling RAGs package and MCP extras first:
 python tests/e2e_v02.py
+python tests/e2e_v03.py
 ```
 
-The [recorded CI run](https://github.com/MasterLKH180cm/agentic-system/actions/runs/44799515210)
+The historical [v0.2 CI run](https://github.com/MasterLKH180cm/agentic-system/actions/runs/44799515210)
 passed all three jobs. The ordinary suite reports **54 passed, 3 skipped**
 (35 core, 4 platform, and 15 request-body/cursor checks). The three optional
 storage checks run in the external-service job, where **all 7 platform tests
@@ -411,8 +487,8 @@ MinIO server built from fixed upstream source. These counts overlap.
 The full **RAG HTTP + Agent HTTP + independent worker + both stdio MCP bridges**
 passed with SQLite and PostgreSQL. CI also built and exercised all three Docker
 Compose containers. Local PostgreSQL 16.2 checks passed separately. The
-[verification ledger](docs/IMPLEMENTATION_REVIEW.md) identifies the exact
-commits, service fixture, assertions, and remaining boundaries. Paid model
+[v0.3 verification ledger](docs/IMPLEMENTATION_REVIEW_V03.md) identifies the current
+specification, service fixtures, assertions, and remaining boundaries. Paid model
 quality and visual browser interaction have not been verified.
 
 Execution is **at least once**. A crash between a tool response and its checkpoint

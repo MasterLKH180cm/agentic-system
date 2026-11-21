@@ -22,6 +22,17 @@ class ModelGateway:
         self.store = store or Store(config.db_path, lease_seconds=config.lease_seconds, max_attempts=config.max_attempts,
                                     step_timeout_seconds=config.step_timeout_seconds)
 
+    @staticmethod
+    def input_units(system: str, message: str) -> int:
+        # Includes system/schema text and conservative chat-message framing.
+        return len(system.encode("utf-8")) + len(message.encode("utf-8")) + 128
+
+    def input_capacity(self, system: str, *, tenant: str, run_id: str | None) -> int:
+        if self.config.provider == "offline":
+            return 14000
+        remaining = self.store.remaining_model_tokens(tenant, run_id, self.config.max_model_tokens)
+        return max(0, min(14000, remaining - self.config.max_model_output_tokens - self.input_units(system, "")))
+
     def routes(self, purpose: str) -> list[ModelRoute]:
         routes = list(self.config.routes)
         if not routes and self.config.provider in {"openai", "anthropic"}:
@@ -74,7 +85,7 @@ class ModelGateway:
             raise ValueError("Model input exceeds size limit")
         # UTF-8 bytes plus message overhead intentionally over-reserves compared
         # with typical text tokenizers. Reported usage replaces it when available.
-        estimated_input = len(system.encode()) + len(message.encode()) + 128
+        estimated_input = self.input_units(system, message)
         output_limit = self.config.max_model_output_tokens
         routes = self.routes(purpose)
         async with httpx.AsyncClient(timeout=90, follow_redirects=False) as client:
@@ -116,7 +127,11 @@ class ModelGateway:
                         text = "".join(block["text"] for block in data["content"] if block.get("type") == "text")
                     if not isinstance(text, str) or not text.strip():
                         raise ValueError("Model returned no text")
-                    return text[:32000]
+                    if len(text) > 32000:
+                        raise ValueError("Model text exceeds the response limit")
+                    if reported and counts[1] > output_limit:
+                        raise ValueError("Model exceeded its configured output token limit")
+                    return text
                 except asyncio.CancelledError:
                     self.store.settle_usage(reservation, status="uncertain_cancelled")
                     raise

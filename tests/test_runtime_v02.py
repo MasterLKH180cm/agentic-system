@@ -362,7 +362,8 @@ async def test_dag_summary_rejects_missing_or_fabricated_citations(system, monke
     async def generation(system_prompt, message, **kwargs):
         parsed = json.loads(message)
         assert parsed["sources"][0]["chunk_id"] == "c1"
-        return answer
+        return json.dumps({"outcome": "success", "answer": answer,
+                           "cited_ids": ["invented"] if "[invented]" in answer else [], "refusal_reason": None})
 
     monkeypatch.setattr(tools.model, "complete", generation)
     job = {"tool": "model.summarize", "args": {}, "tenant": "a", "run_id": run_id,
@@ -380,7 +381,8 @@ async def test_summary_packs_complete_bounded_json_and_only_returns_cited_source
     async def generation(system_prompt, message, **kwargs):
         captured["prompt"] = message
         captured["parsed"] = json.loads(message)
-        return "Session timeout is 30 minutes [c1]."
+        return json.dumps({"outcome": "success", "answer": "Session timeout is 30 minutes [c1].",
+                           "cited_ids": ["c1"], "refusal_reason": None})
 
     monkeypatch.setattr(tools.model, "complete", generation)
     sources = [{"chunk_id": f"c{i}", "document_id": f"doc{i}",

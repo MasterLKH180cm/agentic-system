@@ -1,5 +1,6 @@
 """Bounded domain contracts shared by submission, planning and execution."""
 import json
+import math
 import re
 from typing import Literal
 
@@ -21,10 +22,46 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class RowPredicate(StrictModel):
+    field: str = Field(min_length=1, max_length=128)
+    op: Literal["eq", "ne", "gt", "gte", "lt", "lte", "in", "contains"]
+    value: str | float | int | bool | list | None = None
+
+    @model_validator(mode="after")
+    def valid_value(self):
+        values = self.value if isinstance(self.value, list) else [self.value]
+        if len(values) > 100 or any(type(v) not in (str, float, int, bool, type(None)) for v in values):
+            raise ValueError("Row predicate requires at most 100 scalar values")
+        if any(type(v) is float and not math.isfinite(v) for v in values):
+            raise ValueError("Row predicate requires finite numbers")
+        if self.op == "in" and not isinstance(self.value, list):
+            raise ValueError("The in predicate requires a list")
+        return self
+
+
+class Aggregation(StrictModel):
+    operation: Literal["count", "sum", "mean", "min", "max"]
+    field: str | None = Field(default=None, min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def valid_field(self):
+        if self.operation != "count" and self.field is None:
+            raise ValueError("Numeric aggregation requires a field")
+        return self
+
+
 class SearchArgs(StrictModel):
     question: str | None = Field(default=None, min_length=2, max_length=2000)
     mode: str = Field(default="hybrid", pattern=r"^[a-z][a-z0-9_]{0,39}$")
     top_k: int = Field(default=5, ge=1, le=10)
+    row_filters: list[RowPredicate] = Field(default_factory=list, max_length=20)
+    aggregate: Aggregation | None = None
+
+    @model_validator(mode="after")
+    def structured_only(self):
+        if (self.row_filters or self.aggregate is not None) and self.mode != "structured":
+            raise ValueError("Structured arguments require structured mode")
+        return self
 
 
 class SummaryArgs(StrictModel):

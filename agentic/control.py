@@ -94,6 +94,9 @@ class ControlPlane:
                 raise PermissionError("Requested cost budget exceeds policy")
             cost = min(cost, ceiling) if cost is not None else ceiling
         specification = {
+            "evidence_contract_version": 2,
+            "rag_admission_policy": self.settings.rag_admission_policy,
+            "rag_admission_profile_ids": list(self.settings.rag_admission_profile_ids),
             "runtime_mode": payload.runtime_mode,
             "allowed_tools": sorted(allowed), "allowed_namespaces": sorted(namespaces),
             "memory_namespace": namespace,

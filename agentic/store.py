@@ -17,6 +17,7 @@ from typing import Iterator
 import uuid
 
 from agentic.schemas import WorkflowIn
+from agentic.admission import safe_metadata
 
 
 class BudgetExceeded(ValueError):
@@ -377,7 +378,10 @@ class Store:
             if cur.rowcount == 0:
                 return False  # stale worker or cancelled run; fenced out
             self.event(conn, job["tenant"], job["run_id"], job["id"],
-                       "failed" if unsuccessful else "completed", {"result_bytes": len(serialized), "outcome": outcome})
+                       "failed" if unsuccessful else "completed", {
+                           "result_bytes": len(serialized), "outcome": outcome,
+                           **safe_metadata(result, job.get("specification", {}).get("rag_admission_profile_ids", [])),
+                       })
             self.refresh(conn, job["run_id"])
             return True
 
@@ -599,6 +603,22 @@ class Store:
             return conn.execute(
                 "DELETE FROM memories WHERE tenant=? AND namespace=? AND id=?", (tenant, namespace, record_id),
             ).rowcount > 0
+
+    def remaining_model_tokens(self, tenant: str, run_id: str | None, default_limit: int) -> int:
+        """Packing hint only; the following atomic reservation is authoritative."""
+        if run_id is None:
+            return default_limit
+        with self.connect() as db:
+            row = db.execute("SELECT specification,status FROM runs WHERE tenant=? AND id=?", (tenant, run_id)).fetchone()
+            if row is None or row["status"] in {"failed", "completed", "cancelled"}:
+                raise LeaseLost("Model packing requires an active tenant workflow")
+            specification = json.loads(row["specification"])
+            used = db.execute("SELECT COALESCE(SUM(charged_tokens),0) FROM model_usage WHERE tenant=? AND run_id=?",
+                              (tenant, run_id)).fetchone()[0]
+            remaining = specification.get("max_model_tokens", default_limit) - used
+            if remaining <= 0:
+                raise BudgetExceeded("Workflow model budget is exhausted")
+            return remaining
 
     def reserve_usage(
         self, tenant: str, run_id: str | None, route: str, purpose: str,

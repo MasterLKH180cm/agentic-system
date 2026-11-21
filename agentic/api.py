@@ -23,7 +23,7 @@ MemoryName = Annotated[str, Path(pattern=NAME_PATTERN)]
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     config = settings or Settings.from_env()
-    app = FastAPI(title="Agentic Workflow System", version="0.2.0")
+    app = FastAPI(title="Agentic Workflow System", version="0.3.0")
     store = Store(config.db_path, lease_seconds=config.lease_seconds, max_attempts=config.max_attempts,
                   step_timeout_seconds=config.step_timeout_seconds)
     auth = Authenticator(config)

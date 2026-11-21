@@ -105,6 +105,24 @@ class Settings:
     max_queued_runs: int = 100
     routes: tuple[ModelRoute, ...] = ()
     tenant_policies: dict[str, dict] = field(default_factory=dict)
+    rag_admission_policy: str = "compatibility"
+    rag_admission_profile_ids: tuple[str, ...] = ()
+    rag_timeout_seconds: float = 180
+
+    def __post_init__(self):
+        if (type(self.rag_timeout_seconds) not in (int, float)
+                or not math.isfinite(self.rag_timeout_seconds) or not 1 <= self.rag_timeout_seconds <= 360):
+            raise ValueError("AGENT_RAG_TIMEOUT_SECONDS must be finite and within 1..360")
+        if self.rag_admission_policy not in {"compatibility", "calibrated_required"}:
+            raise ValueError("Unknown RAG admission policy")
+        profiles = self.rag_admission_profile_ids
+        if not isinstance(profiles, tuple) or len(profiles) > 32 or any(
+            not isinstance(value, str) or not 1 <= len(value) <= 100 or value != value.strip()
+            or any(ord(char) < 32 for char in value) for value in profiles
+        ) or len(set(profiles)) != len(profiles):
+            raise ValueError("RAG admission profile IDs must be distinct bounded identifiers")
+        if self.rag_admission_policy == "calibrated_required" and not profiles:
+            raise ValueError("Required RAG admission needs a nonempty profile allowlist")
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -169,6 +187,9 @@ class Settings:
         policies = json.loads(os.getenv("AGENT_TENANT_POLICIES_JSON", "{}"))
         if not isinstance(policies, dict) or any(not isinstance(v, dict) for v in policies.values()):
             raise ValueError("AGENT_TENANT_POLICIES_JSON must map tenants to policy settings")
+        profiles = json.loads(os.getenv("AGENT_RAG_ADMISSION_PROFILE_IDS_JSON", "[]"))
+        if not isinstance(profiles, list):
+            raise ValueError("AGENT_RAG_ADMISSION_PROFILE_IDS_JSON must be an array")
         return cls(
             db_path=os.getenv("AGENT_DATABASE_URL") or os.getenv("AGENT_DB_PATH", str(Path("data") / "agentic.db")),
             keys=keys,
@@ -185,4 +206,7 @@ class Settings:
             max_attempts=attempts, max_model_output_tokens=output_tokens,
             max_model_tokens=token_limit, max_queued_runs=queued,
             routes=routes, tenant_policies=policies,
+            rag_admission_policy=os.getenv("AGENT_RAG_ADMISSION_POLICY", "compatibility"),
+            rag_admission_profile_ids=tuple(profiles),
+            rag_timeout_seconds=float(os.getenv("AGENT_RAG_TIMEOUT_SECONDS", "180")),
         )
