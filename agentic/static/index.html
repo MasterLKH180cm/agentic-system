@@ -11,7 +11,7 @@
 <script>
 (() => {
   const byId = id => document.getElementById(id);
-  const state = { generation: 0, cursor: '', stream: null };
+  const state = { generation: 0, cursor: '', stream: null, submission: null };
   const actions = new Map();
 
   function context() {
@@ -55,17 +55,79 @@
     byId('notice').textContent = '';
   }
 
-  async function request(owner, path, method = 'GET', body) {
-    if (!owner.token) throw Error('Enter a credential first.');
-    const response = await fetch(path, {
-      method,
-      headers: { Authorization: 'Bearer ' + owner.token, 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      cache: 'no-store',
+  function requestError(message, status = 0) {
+    const error = Error(message);
+    // A timeout or server error can occur after the server committed a POST.
+    error.definitive = status >= 400 && status < 500 && status !== 408;
+    return error;
+  }
+
+  function errorMessage(result, status) {
+    const fallback = 'Request failed (HTTP ' + status + '). Check the request and try again.';
+    if (typeof result?.detail === 'string' && result.detail.trim()) return result.detail.trim().slice(0, 600);
+    if (!Array.isArray(result?.detail)) return fallback;
+    const messages = result.detail.slice(0, 3).flatMap(item => {
+      if (typeof item?.msg !== 'string' || !item.msg.trim()) return [];
+      const parts = Array.isArray(item.loc) ? item.loc : [];
+      const field = parts.filter(part => typeof part === 'string' || Number.isInteger(part))
+        .filter(part => part !== 'body').slice(0, 5).join('.').slice(0, 100);
+      return [(field ? field + ': ' : '') + item.msg.trim().slice(0, 180)];
     });
-    const result = await response.json();
-    if (!response.ok) throw Error(result.detail || 'Request failed.');
+    return messages.length ? messages.join('; ').slice(0, 600) : fallback;
+  }
+
+  async function request(owner, path, method = 'GET', body, expectedStatus) {
+    if (!owner.token) throw Error('Enter a credential first.');
+    let response;
+    try {
+      response = await fetch(path, {
+        method,
+        headers: { Authorization: 'Bearer ' + owner.token, 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        cache: 'no-store',
+      });
+    } catch {
+      throw requestError('Could not receive a response. Check the connection and try again.');
+    }
+    let result;
+    try {
+      result = await response.json();
+    } catch {
+      const message = response.ok ? 'Unreadable response (HTTP ' + response.status + ').' :
+        errorMessage(null, response.status);
+      throw requestError(message, response.status);
+    }
+    if (!response.ok) throw requestError(errorMessage(result, response.status), response.status);
+    if (expectedStatus !== undefined && response.status !== expectedStatus) {
+      throw requestError('Unexpected response (HTTP ' + response.status + ').');
+    }
     return result;
+  }
+
+  function clearSubmission() {
+    state.submission = null;
+    const owner = actions.get('submit');
+    if (owner) releaseAction('submit', owner);
+  }
+
+  function submissionPayload() {
+    return { goal: byId('goal').value, runtime_mode: byId('mode').value };
+  }
+
+  function clearChangedSubmission() {
+    if (state.submission && (state.submission.token !== byId('token').value.trim() ||
+        state.submission.signature !== JSON.stringify(submissionPayload()))) clearSubmission();
+  }
+
+  function submissionFor(owner, payload) {
+    const signature = JSON.stringify(payload);
+    if (!state.submission || state.submission.signature !== signature || state.submission.token !== owner.token) {
+      const bytes = crypto.getRandomValues(new Uint8Array(16));
+      const key = 'ui.' + Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+      state.submission = { signature, token: owner.token, key, uncertain: false };
+    }
+    state.submission.owner = owner;
+    return state.submission;
   }
 
   function runPath(owner) {
@@ -99,14 +161,32 @@
     Object.assign(owner, context());
     actions.set('submit', owner);
     byId('submit').disabled = true;
-    const result = await request(owner, '/workflows', 'POST', {
-      goal: byId('goal').value,
-      runtime_mode: byId('mode').value,
-    });
-    if (!isCurrent(owner)) return;
-    byId('run').value = result.id;
-    owner.runId = result.id;
-    showResult(owner, result);
+    if (!owner.token) throw Error('Enter a credential first.');
+    const payload = submissionPayload();
+    const submission = submissionFor(owner, payload);
+    const previouslyUncertain = submission.uncertain;
+    // An in-flight request is unresolved, including when its view is abandoned.
+    submission.uncertain = true;
+    const ownsSubmission = () => state.submission === submission && submission.owner === owner && isCurrent(owner);
+    try {
+      const result = await request(owner, '/workflows', 'POST', { ...payload, idempotency_key: submission.key }, 202);
+      if (!result || typeof result.id !== 'string' ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(result.id) ||
+          typeof result.duplicate !== 'boolean') {
+        throw requestError('The submission response was incomplete.');
+      }
+      if (!ownsSubmission()) return;
+      state.submission = null;
+      byId('run').value = result.id;
+      owner.runId = result.id;
+      showResult(owner, result);
+    } catch (error) {
+      if (!ownsSubmission()) return;
+      if (error.definitive && !previouslyUncertain) state.submission = null;
+      const retry = state.submission === submission ?
+        ' Submission is unconfirmed. Retry without changing the goal, execution mode or credential to avoid duplicate work.' : '';
+      throw Error(error.message + retry);
+    }
   });
 
   action('refresh', async owner => {
@@ -174,6 +254,11 @@
   });
 
   byId('run').addEventListener('input', resetView);
-  byId('token').addEventListener('input', resetView);
+  byId('goal').addEventListener('input', clearChangedSubmission);
+  byId('mode').addEventListener('change', clearChangedSubmission);
+  byId('token').addEventListener('input', () => {
+    clearChangedSubmission();
+    resetView();
+  });
 })();
 </script></body></html>

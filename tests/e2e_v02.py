@@ -174,14 +174,41 @@ def main():
             assert stream.status_code == 200 and "event: done" in stream.text
             checks.append("Separated approval credential, persisted artifact, authenticated SSE")
 
+            before_runs = {item["id"] for item in agent("GET", "/workflows")}
+            for invalid_body in (b'{"goal":"Calculate 6 * 7","max_cost_usd":1e309}',
+                                 b'{"goal":"\\ud800xx"}'):
+                rejected = client.post(agent_url + "/workflows", content=invalid_body, headers={
+                    "Authorization": "Bearer e2e-agent-a", "Content-Type": "application/json",
+                })
+                assert rejected.status_code == 422, rejected.text
+                assert all(set(item) == {"type", "loc", "msg"} for item in rejected.json()["detail"])
+            memory_before = agent("GET", "/memory/notes/lesson")
+            agent("PUT", "/memory/notes/lesson", expected=422, content=json.dumps({
+                "content": "Do not replace retained memory", "metadata": {"nested": {"label": "\ud800"}},
+            }).encode("utf-8"))
+            assert agent("GET", "/memory/notes/lesson") == memory_before
+            source_before = rag("GET", "/documents/session")
+            rag("POST", "/documents", expected=422, content=json.dumps({
+                "document_id": "session", "title": "Do not replace retained source", "text": "Rejected content",
+                "metadata": {"nested": {"label": "\ud800"}},
+            }).encode("utf-8"))
+            assert rag("GET", "/documents/session") == source_before
+            checks.append("Real HTTP rejects unsafe JSON before workflow, memory or source mutation")
+
             body = json.dumps({"goal": "Calculate 2 + 3", "idempotency_key": "tcp-hook"}).encode()
             stamp = str(int(time.time()))
             digest = hmac.new(hook_secret.encode(), stamp.encode() + b"." + body, hashlib.sha256).hexdigest()
             headers = {"X-Agent-Hook": "e2e", "X-Agent-Timestamp": stamp, "X-Agent-Signature": "sha256=" + digest, "Content-Type": "application/json"}
+            for field, value in ((b"X-Agent-Timestamp", b"\xb2"), (b"X-Agent-Signature", b"sha256=\xe9")):
+                raw_headers = {key.encode("ascii"): value.encode("ascii") for key, value in headers.items()}
+                raw_headers[field] = value
+                rejected = client.post(agent_url + "/hooks/workflows", content=body, headers=raw_headers)
+                assert rejected.status_code == 401, rejected.text
+            assert {item["id"] for item in agent("GET", "/workflows")} == before_runs
             hook = client.post(agent_url + "/hooks/workflows", content=body, headers=headers)
             assert hook.status_code == 202 and finish(hook.json()["id"])["status"] == "completed"
             assert client.post(agent_url + "/hooks/workflows", content=body, headers=headers).status_code == 409
-            checks.append("Real signed inbound webhook and replay prevention")
+            checks.append("Real signed webhook, malformed-header rejection without execution and replay prevention")
             subprocess.run([sys.executable, str(ROOT / "tests" / "smoke_mcp.py")], env=env, cwd=ROOT, check=True, timeout=45)
             checks.append("Both real stdio MCP handshakes and HTTP-backed tool calls")
             print(json.dumps({"status": "passed", "checks": checks, "live_paid_provider": False}, indent=2))

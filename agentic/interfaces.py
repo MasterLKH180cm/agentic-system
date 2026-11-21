@@ -94,10 +94,12 @@ def install_interfaces(app, store, submit_callback, authenticator):
         timestamp = request.headers.get("x-agent-timestamp", "")
         signature = request.headers.get("x-agent-signature", "")
         hook = hooks.get(identity)
-        if hook is None or not timestamp.isdigit() or len(timestamp) > 12:
+        if hook is None or re.fullmatch(r"[0-9]{1,12}", timestamp) is None:
             raise HTTPException(401, "Invalid webhook authentication")
         if abs(time.time() - int(timestamp)) > 300:
             raise HTTPException(401, "Expired webhook timestamp")
+        if re.fullmatch(r"sha256=[0-9a-f]{64}", signature) is None:
+            raise HTTPException(401, "Invalid webhook signature")
         body = bytearray()
         async for chunk in request.stream():
             body.extend(chunk)

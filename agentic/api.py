@@ -3,6 +3,8 @@ import asyncio
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from agentic.auth import Authenticator
@@ -24,6 +26,18 @@ MemoryName = Annotated[str, Path(pattern=NAME_PATTERN)]
 def create_app(settings: Settings | None = None) -> FastAPI:
     config = settings or Settings.from_env()
     app = FastAPI(title="Agentic Workflow System", version="0.3.0")
+
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_error(request: Request, exc: RequestValidationError):
+        def safe_text(value: str) -> str:
+            return value.encode("utf-8", "backslashreplace").decode("utf-8")
+
+        # Rejected input and exception contexts may be private or not JSON-safe.
+        details = [{"type": safe_text(error["type"]),
+                    "loc": [safe_text(part) if isinstance(part, str) else part for part in error["loc"]],
+                    "msg": safe_text(error["msg"])} for error in exc.errors()]
+        return JSONResponse(status_code=422, content={"detail": details})
+
     store = Store(config.db_path, lease_seconds=config.lease_seconds, max_attempts=config.max_attempts,
                   step_timeout_seconds=config.step_timeout_seconds)
     auth = Authenticator(config)

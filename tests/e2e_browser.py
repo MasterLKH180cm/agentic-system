@@ -15,7 +15,9 @@ from e2e_support import QUESTION, Services, clean_environment, eventually, requi
 
 
 EXPECTED = ["successful_workflow", "evidence_refusal", "unauthorized_access", "approval_separation",
-            "stream_view_ownership", "stale_status_response", "stale_submission_response", "credential_lifetime"]
+            "stream_view_ownership", "stale_status_response", "stale_submission_response", "credential_lifetime",
+            "actionable_request_errors", "ambiguous_submission_retry", "malformed_acknowledgement_retry",
+            "submission_identity_lifetime"]
 
 
 def browser_eventually(page, check, *, timeout=10, description="browser event"):
@@ -89,6 +91,189 @@ def screenshot(page, artifacts, report, name):
     path = artifacts / name
     page.screenshot(path=str(path), full_page=True)
     report["screenshots"].append(str(path))
+
+
+def click_submission(page, services):
+    """Submit the unchanged form, preserving the meaning of a user's retry."""
+    from playwright.sync_api import expect
+    with page.expect_request(lambda request: request.method == "POST" and
+                             request.url == services.agent_url + "/workflows") as sent:
+        page.locator("#submit").click()
+    expect(page.locator("#submit")).to_be_enabled()
+    payload = sent.value.post_data_json
+    require(re.fullmatch(r"ui\.[0-9a-f]{32}", payload.get("idempotency_key", "")), "Missing cryptographic submission identity")
+    require(payload["idempotency_key"] not in sent.value.url, "Submission identity leaked into the URL")
+    return payload, displayed_result(page)
+
+
+def assert_single_execution(services, goal, run_id, *, token=None):
+    state = services.finish(run_id, token=token)
+    require(state["status"] == "completed", "Retried real workflow did not complete")
+    runs = services.request("GET", "/workflows", token=token)
+    require([run["id"] for run in runs if run["goal"] == goal] == [run_id], "Retry created another durable workflow")
+    require(len(state["steps"]) == 1 and state["steps"][0]["attempts"] == 1, "Retry repeated durable execution")
+    events = services.request("GET", f"/workflows/{run_id}/events", token=token)
+    require(sum(event["type"] == "created" for event in events) == 1 and
+            sum(event["type"] == "started" for event in events) == 1, "Retry added another execution event")
+
+
+def run_submission_polish(page, services, report, artifacts):
+    from playwright.sync_api import expect
+
+    url = services.agent_url + "/workflows"
+    page.locator("#token").fill(services.key)
+    page.locator("#goal").fill("x")
+    before = {run["id"] for run in services.request("GET", "/workflows")}
+    first, result = click_submission(page, services)
+    require(result is None, "Rejected submission displayed an accepted result")
+    notice = page.locator("#notice").inner_text()
+    require("goal" in notice and "at least 3 characters" in notice and "[object Object]" not in notice,
+            "Actual field-validation response was not actionable")
+    require(len(notice) <= 800, "Validation notice is unbounded")
+    second, _ = click_submission(page, services)
+    require(first["idempotency_key"] != second["idempotency_key"], "Definitive first rejection kept an unresolved identity")
+    require({run["id"] for run in services.request("GET", "/workflows")} == before, "Validation rejection created a workflow")
+    screenshot(page, artifacts, report, "validation-error.png")
+
+    page.route(url, lambda route: route.fulfill(status=503, content_type="text/html",
+               body="<h1>fixture intermediary response</h1>"), times=1)
+    failed, _ = click_submission(page, services)
+    notice = page.locator("#notice").inner_text()
+    require("HTTP 503" in notice and "unconfirmed" in notice and "fixture intermediary" not in notice,
+            "Non-JSON transport error did not use the safe HTTP fallback")
+    rejected, _ = click_submission(page, services)  # Actual 422 cannot resolve the earlier 503 ambiguity.
+    repeated, _ = click_submission(page, services)
+    require(failed["idempotency_key"] == rejected["idempotency_key"] == repeated["idempotency_key"],
+            "A later rejection discarded an earlier uncertain submission identity")
+    report["checks"].append({"id": EXPECTED[8], "passed": True, "real_validation_status": 422,
+                             "non_json_status": 503, "messages_bounded": True, "earlier_uncertainty_preserved": True})
+
+    committed = []
+
+    def discard_committed_response(route):
+        actual = route.fetch()
+        require(actual.status == 202, "Transport fault did not follow an actual committed submission")
+        committed.append(actual.json())
+        route.abort("connectionreset")
+
+    goal = "Calculate 31 + 11"
+    page.locator("#goal").fill(goal)
+    page.route(url, discard_committed_response, times=1)
+    original, result = click_submission(page, services)
+    require(result is None and len(committed) == 1, "Lost response unexpectedly acknowledged the submission")
+    expect(page.locator("#notice")).to_contain_text("unconfirmed")
+    run_id = committed[-1]["id"]
+    assert_single_execution(services, goal, run_id)
+    # Re-entering the exact same value does not create a different logical request.
+    page.locator("#goal").fill(goal)
+    retried, acknowledged = click_submission(page, services)
+    require(retried == original and acknowledged == {"id": run_id, "duplicate": True},
+            "Lost committed response was not recovered using the original submission")
+    assert_single_execution(services, goal, run_id)
+    screenshot(page, artifacts, report, "retried-submission.png")
+    report["checks"].append({"id": EXPECTED[9], "passed": True, "real_committed_response_discarded": True,
+                             "duplicate_recognized": True, "durable_runs_after_retry": 1, "step_attempts": 1})
+
+    fresh, acknowledged = click_submission(page, services)
+    require(fresh["idempotency_key"] != original["idempotency_key"] and acknowledged["id"] != run_id
+            and acknowledged["duplicate"] is False, "Acknowledged success prevented an intentional new workflow")
+    require(services.finish(acknowledged["id"])["status"] == "completed", "Intentional new submission failed")
+
+    malformed_cases = ("invalid_json", "invalid_id", "invalid_unicode_id", "path_id", "control_id",
+                       "invalid_duplicate", "unexpected_status")
+    for index, kind in enumerate(malformed_cases):
+        goal = f"Calculate 40 + {index + 1}"
+        page.locator("#goal").fill(goal)
+        committed.clear()
+
+        def corrupt_acknowledgement(route):
+            actual = route.fetch()
+            require(actual.status == 202, "Malformed acknowledgement did not follow a real submission")
+            value = actual.json()
+            committed.append(value)
+            bad_ids = {"invalid_id": 123, "invalid_unicode_id": "\ud800", "path_id": "../" + value["id"],
+                       "control_id": value["id"] + "\x00"}
+            broken = {**value, "id": bad_ids[kind]} if kind in bad_ids else {**value, "duplicate": "false"}
+            body = "{" if kind == "invalid_json" else json.dumps(value if kind == "unexpected_status" else broken)
+            route.fulfill(status=200 if kind == "unexpected_status" else 202, content_type="application/json", body=body)
+
+        page.route(url, corrupt_acknowledgement, times=1)
+        original, result = click_submission(page, services)
+        require(result is None and len(committed) == 1, "Malformed success was treated as acknowledged")
+        expect(page.locator("#notice")).to_contain_text("unconfirmed")
+        retried, acknowledged = click_submission(page, services)
+        require(retried == original and acknowledged == {"id": committed[0]["id"], "duplicate": True},
+                "Malformed successful response caused a fresh submission identity")
+        assert_single_execution(services, goal, committed[0]["id"])
+    report["checks"].append({"id": EXPECTED[10], "passed": True, "variants": list(malformed_cases),
+                             "actual_commits_recovered": len(malformed_cases), "repeated_executions": 0})
+
+    # A changed logical request gets a fresh identity; these faults occur before forwarding.
+    for index, change in enumerate(("goal", "mode", "credential")):
+        page.locator("#token").fill(services.key)
+        page.locator("#mode").select_option("dag")
+        page.locator("#goal").fill(f"Calculate 60 + {index + 1}")
+        page.route(url, lambda route: route.abort("connectionreset"), times=1)
+        original, _ = click_submission(page, services)
+        token = services.key
+        if change == "goal":
+            page.locator("#goal").fill("Calculate 60 + 9")
+        elif change == "mode":
+            page.locator("#mode").select_option("agent_loop")
+        else:
+            token = services.other_key
+            page.locator("#token").fill(token)
+        changed, acknowledged = click_submission(page, services)
+        require(changed["idempotency_key"] != original["idempotency_key"] and acknowledged["duplicate"] is False,
+                "Changed " + change + " reused an unresolved submission")
+        require(services.finish(acknowledged["id"], token=token)["status"] == "completed", "Changed request failed")
+
+    # A stale acknowledged response must not clear the newer pending identity.
+    page.locator("#token").fill(services.key)
+    page.locator("#mode").select_option("dag")
+    page.locator("#goal").fill("Calculate 80 + 1")
+    delayed = []
+
+    def hold_acknowledgement(route):
+        actual = route.fetch()
+        require(actual.status == 202, "Held response was not a real acknowledgement")
+        delayed.append((route, actual))
+
+    page.route(url, hold_acknowledgement, times=1)
+    page.locator("#submit").click()
+    browser_eventually(page, lambda: delayed, description="older actual acknowledgement held")
+    later_goal = "Calculate 80 + 2"
+    page.locator("#goal").fill(later_goal)
+    committed.clear()
+    page.route(url, discard_committed_response, times=1)
+    newer, _ = click_submission(page, services)
+    with page.expect_response(lambda response: response.url == url) as delivered:
+        delayed[0][0].fulfill(response=delayed[0][1])
+    delivered.value.finished()
+    flush_render(page)
+    require(displayed_result(page) is None and page.locator("#run").input_value() == "",
+            "Obsolete acknowledgement overwrote the unresolved newer submission")
+    retry, acknowledged = click_submission(page, services)
+    require(retry == newer and acknowledged == {"id": committed[0]["id"], "duplicate": True},
+            "Obsolete acknowledgement cleared the newer pending identity")
+    assert_single_execution(services, later_goal, committed[0]["id"])
+    require(services.finish(delayed[0][1].json()["id"])["status"] == "completed", "Older actual submission did not execute")
+
+    page.locator("#goal").fill("Calculate 90 + 1")
+    page.route(url, lambda route: route.abort("connectionreset"), times=1)
+    in_memory, _ = click_submission(page, services)
+    storage = page.evaluate("() => ({local: {...localStorage}, session: {...sessionStorage}})")
+    require(storage == {"local": {}, "session": {}} and not page.context.cookies(), "Pending identity persisted in browser storage")
+    page.reload()
+    expect(page.locator("#token")).to_have_value("")
+    page.locator("#token").fill(services.key)
+    page.locator("#goal").fill("Calculate 90 + 1")
+    reloaded, acknowledged = click_submission(page, services)
+    require(reloaded["idempotency_key"] != in_memory["idempotency_key"], "Submission identity survived a page reload")
+    require(services.finish(acknowledged["id"])["status"] == "completed", "Reloaded submission failed")
+    report["checks"].append({"id": EXPECTED[11], "passed": True, "fresh_after_acknowledgement": True,
+                             "changed_inputs": ["goal", "mode", "credential"], "obsolete_acknowledgement_fenced": True,
+                             "storage_empty_while_pending": True, "fresh_after_reload": True})
 
 
 def run(page, services, report, artifacts):
@@ -264,6 +449,9 @@ def run(page, services, report, artifacts):
     require(displayed_result(page) is None, "Private workflow content survived reload")
     report["checks"].append({"id": EXPECTED[7], "passed": True, "authorization_header_only": True,
                              "storage_empty": True, "credential_absent_after_reload": True})
+    run_submission_polish(page, services, report, artifacts)
+    require(not observed["url_leak"] and not observed["body_leak"] and not observed["missing_auth"],
+            "Submission retry leaked a credential or dropped authentication")
 
 
 def main():

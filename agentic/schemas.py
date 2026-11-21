@@ -243,6 +243,7 @@ class MemoryIn(StrictModel):
 
     @model_validator(mode="after")
     def bounded_metadata(self) -> "MemoryIn":
+        json.dumps(self.metadata, ensure_ascii=False, allow_nan=False).encode("utf-8")
         if len(json.dumps(self.metadata)) > 4000:
             raise ValueError("Memory metadata exceeds 4000 characters")
         return self

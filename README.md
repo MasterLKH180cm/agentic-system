@@ -105,6 +105,13 @@ embeddings, and extractive synthesis. Enter `local-agent-key` in the UI to submi
 and inspect runs. Approval uses `local-approver-key`; RAGs uses
 `local-development-key`. These are development credentials.
 
+The dashboard shows field-specific validation messages. If a submission is
+unconfirmed because its response was lost, keep the page open and retry with
+the same goal, execution mode and credential: the pending submission identity
+lets the API return the existing run. Acknowledged success or a changed input
+starts a new logical submission. Reloading the page discards pending identity
+and credentials; inspect existing runs before resubmitting after a reload.
+
 ```bash
 docker compose logs -f api worker rags
 docker compose down  # Keep named data volumes.
@@ -417,8 +424,14 @@ The UI accepts a token already issued by the identity provider.
 Hooks use `POST /hooks/workflows` with `X-Agent-Hook`, `X-Agent-Timestamp`, and
 `X-Agent-Signature: sha256=HEX`. Sign `timestamp + "." + raw_body` using the
 configured HMAC-SHA256 secret. Timestamps have a five-minute acceptance window;
+use ASCII decimal seconds and exactly 64 lowercase hexadecimal signature
+digits. Malformed authentication returns `401` before creating a run or receipt;
 replayed signatures return `409`. See [the protocol test](tests/e2e_v02.py) for
 a complete signing example.
+
+Invalid API input returns `422` with `type`, `loc` and `msg` details without
+echoing rejected values. Memory metadata must contain finite JSON values and
+valid Unicode; a rejected replacement preserves the original readable record.
 
 | Runtime bound | Default |
 | --- | --- |
@@ -428,6 +441,93 @@ a complete signing example.
 | `AGENT_STEP_TIMEOUT_SECONDS` / `AGENT_MAX_ATTEMPTS` | 300 seconds / 3 attempts, including expired leases |
 | `AGENT_MAX_MODEL_TOKENS` / `AGENT_MAX_MODEL_OUTPUT_TOKENS` | 12,000 per run / 1,000 requested output tokens per call |
 | `AGENT_RATE_PER_MINUTE` | 600 requests per tenant/subject fixed-minute bucket |
+
+### Production credential bootstrap
+
+For the two-service setup, generate three distinct credentials for one tenant,
+`tenant-a`. Run this once from the `agentic-system` repository with `RAGs` beside
+it. It writes each service's settings to its own ignored `data/production.env`
+with owner-only permissions (`0600`), prints no credentials, and refuses to
+overwrite either file. Existing development `.env` files remain separate.
+
+```bash
+python - <<'PY'
+import json
+import os
+from pathlib import Path
+import secrets
+import shlex
+
+agent_root = Path.cwd().resolve()
+rag_root = agent_root.parent / "RAGs"
+if not (agent_root / "agentic").is_dir() or not (rag_root / "rags").is_dir():
+    raise SystemExit("Run from agentic-system with the RAGs repository beside it")
+requester, approver, rag_token = [secrets.token_urlsafe(32) for _ in range(3)]
+if len({requester, approver, rag_token}) != 3:
+    raise SystemExit("Credential generation collision; run again")
+files = {
+    agent_root / "data/production.env": {
+        "AGENT_ENV": "production",
+        "AGENT_KEYS_JSON": json.dumps({requester: "tenant-a"}),
+        "AGENT_APPROVER_KEYS_JSON": json.dumps({approver: "tenant-a"}),
+        "AGENT_RAG_KEYS_JSON": json.dumps({"tenant-a": rag_token}),
+        "AGENT_RAG_URL": "http://127.0.0.1:8000",
+        "AGENT_DB_PATH": str(agent_root / "data/production-agentic.db"),
+        "AGENT_RATE_DB_PATH": str(agent_root / "data/production-limits.db"),
+        "AGENT_ARTIFACT_DIR": str(agent_root / "data/production-artifacts"),
+        "AGENT_MODEL_PROVIDER": "offline",
+    },
+    rag_root / "data/production.env": {
+        "RAGS_ENV": "production",
+        "RAGS_KEYS_JSON": json.dumps({rag_token: "tenant-a"}),
+        "RAGS_DB_PATH": str(rag_root / "data/production-rags.db"),
+        "RAGS_EMBEDDING_PROVIDER": "local",
+        "RAGS_MODEL_PROVIDER": "extractive",
+    },
+}
+if any(path.exists() for path in files):
+    raise SystemExit("Existing production.env kept; reuse it instead of regenerating credentials")
+for path, values in files.items():
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+        output.write("".join(f"{name}={shlex.quote(value)}\n" for name, value in values.items()))
+PY
+```
+
+Each generated token has 32 random bytes and exceeds the 24-character minimum.
+The maps deliberately have different directions:
+
+| Setting | Mapping | Consuming process |
+| --- | --- | --- |
+| `AGENT_KEYS_JSON` | Requester token → `tenant-a` | Agent API and worker configuration |
+| `AGENT_APPROVER_KEYS_JSON` | Separate approver token → `tenant-a` | Agent API authentication |
+| `AGENT_RAG_KEYS_JSON` | `tenant-a` → RAG token | Agent API and worker configuration |
+| `RAGS_KEYS_JSON` | The same RAG token → `tenant-a` | RAG API authentication |
+
+Use fresh Bash terminals and activate the installed Python environment for each
+service. From each service's repository directory, load its own file before
+starting the process:
+
+```bash
+set -a
+source data/production.env
+set +a
+```
+
+| Terminal | Repository | Start command |
+| --- | --- | --- |
+| RAG API | `RAGs` | `uvicorn rags.api:app --host 127.0.0.1 --port 8000` |
+| Agent API | `agentic-system` | `uvicorn agentic.api:app --host 127.0.0.1 --port 8001` |
+| Agent worker | `agentic-system` | `python -m agentic.worker` |
+
+Both Agent processes must load the same configuration, including persistence,
+artifact paths, tenant/RAG mappings, policies, admission controls, and model
+routes/budgets when enabled. Client requests use the generated credential for
+their role; the earlier `local-*` credentials apply only to the development
+setup. These commands exercise production authentication on localhost with
+offline models. Public deployment still needs the operational controls below.
+The [polish specification](docs/POLISH_SPEC.md) records the setup contract.
 
 ### Docker configuration
 
@@ -463,13 +563,14 @@ REST API. MCP exposes no approval tool.
 
 ## Validation and limits
 
-The current local core suite passed **121 unit tests and 147 integration tests**:
-**268 unique cases, no selected skips**. Collection contains 273 cases; the
+The current local core suite passed **127 unit tests and 173 integration tests**:
+**300 unique cases, no selected skips**. Collection contains 305 cases; the
 five external-service cases are explicitly deselected from the local core gate.
-All **21 production Python modules** are included in coverage: **88.05% of
-statements and 80.86% of branches**, with zero exclusions. The fixed minimums
+All **21 production Python modules** are included in coverage: **88.21% of
+statements and 81.17% of branches**, with zero exclusions. The fixed minimums
 are **85% line coverage and 75% branch coverage**, checked separately.
 See the committed [test specification](docs/TEST_SPEC.md),
+[request/dashboard polish specification](docs/POLISH_SPEC.md),
 [measured results](docs/testing-results.json) and
 [testing/code-quality review](docs/TEST_REVIEW.md) for scope and evidence.
 
@@ -549,15 +650,21 @@ python tests/e2e_browser.py \
   --artifacts reports/testing/browser-artifacts
 ```
 
-The browser gate drives eight checks against actual APIs and an independent
+The browser gate drives twelve checks against actual APIs and an independent
 worker: success, refusal, authorization, separate approval, stream ownership,
-stale status/submission responses and credential lifetime. Missing Chromium
-fails the gate. The actual [Chromium CI job](https://github.com/MasterLKH180cm/agentic-system/actions/runs/44882624007/job/136781024206)
-passed **8/8 checks**, including four captured screenshots and clean service/browser
-shutdown. This workspace's local browser attempt was blocked by UNIX-socket
-restrictions and remains recorded as **failed, 0/8**; it is not counted as an
-executed browser gate. Inspect the exact PR revision's checks for the final
-remote outcome.
+stale responses, credential lifetime, actionable request errors, lost-response
+retry, seven malformed-acknowledgement variants, and submission identity lifetime.
+The retry cases forward real submissions before discarding/corrupting responses
+and verify one durable execution. Missing Chromium fails the gate.
+
+The recorded [baseline Chromium job](https://github.com/MasterLKH180cm/agentic-system/actions/runs/44883239875/job/136782891230)
+passed the previous **8/8 checks**. Current-revision CI must execute all twelve
+checks and supply its own report/screenshots. Local handler probes used real
+APIs/workers with a Node DOM fixture; they are not Chromium execution. The
+earlier local browser attempt remains recorded as **failed, 0/8**, because this
+workspace prohibits the required UNIX sockets. Inspect the
+[PR checks](https://github.com/MasterLKH180cm/agentic-system/pull/5/checks) for the
+current remote outcome.
 
 For the five actual PostgreSQL/Redis/S3 cases, install `.[postgres,storage]`,
 provision disposable services, and configure `AGENT_TEST_POSTGRES_URL`,

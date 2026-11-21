@@ -1,36 +1,38 @@
 # Testing and code-quality review
 
-Measured locally on 2026-11-21. The [test specification](TEST_SPEC.md) was
-committed before this iteration's implementation. The comparison baseline is
+Measured locally on 2026-11-21. The [test specification](TEST_SPEC.md) and
+[request/dashboard polish specification](POLISH_SPEC.md) were committed before
+their respective implementations. The comparison baseline is
 `7d1616e1d696d74733343e53135f5bc9e11b9e6a`; the exact baseline measurement is in
 [testing-baseline.json](testing-baseline.json). Current measurements and
 production-file hashes are in [testing-results.json](testing-results.json).
 
-**Local core validation passes: 121 unit cases and 147 integration cases,
-268 unique cases with zero selected skips.** All 21 production Python modules
-remain in scope. Statement coverage is **2365/2686 = 88.05%** and branch
-coverage is **870/1076 = 80.86%**, above the specification's separate **85%**
+**Local core validation passes: 127 unit cases and 173 integration cases,
+300 unique cases with zero selected skips.** All 21 production Python modules
+remain in scope. Statement coverage is **2379/2697 = 88.21%** and branch
+coverage is **875/1078 = 81.17%**, above the specification's separate **85%**
 and **75%** floors. No production coverage exclusions were introduced.
 
-The v0.2 and v0.3 real HTTP/worker/MCP scripts and the six-check SQLite
-resilience script also passed locally. The actual [Chromium job](https://github.com/MasterLKH180cm/agentic-system/actions/runs/44882624007/job/136781024206)
-passed **8/8 checks** on the first published test implementation; its JSON report,
-four screenshots and cleanup checks were inspected. The local Chromium attempt
-remains blocked by this environment's UNIX-socket restriction. Actual external
-resources, Compose, research and admission remain required for the exact PR
-revision; inspect its checks and artifacts for their final outcomes.
+The v0.2 and v0.3 real HTTP/worker/MCP scripts passed again after the polish;
+the retained six-check SQLite resilience gate has separate execution evidence.
+The recorded [baseline Chromium job](https://github.com/MasterLKH180cm/agentic-system/actions/runs/44883239875/job/136782891230)
+passed the previous **8/8 checks**. The expanded browser gate now requires twelve
+checks on the exact PR revision. Local Chromium remains unavailable under this
+environment's UNIX-socket restriction. Actual browser, external resources,
+Compose, research and admission remain required; inspect the current PR checks
+and artifacts for their final outcomes.
 
 ## Measured core results
 
 | Measurement | Baseline | Current local result |
 | --- | --- | --- |
-| Ordinary/core cases passed | 109, with 3 external checks skipped | 121 unit + 147 integration = 268 unique passes |
-| Collection scope | Historical ordinary suite | 273 cases: 268 core + 5 external |
-| Unit selection | No explicit per-case inventory | 121 selected; 152 deliberately deselected |
-| Core integration selection | No explicit per-case inventory | 147 selected; 126 deliberately deselected |
+| Ordinary/core cases passed | 109, with 3 external checks skipped | 127 unit + 173 integration = 300 unique passes |
+| Collection scope | Historical ordinary suite | 305 cases: 300 core + 5 external |
+| Unit selection | No explicit per-case inventory | 127 selected; 178 deliberately deselected |
+| Core integration selection | No explicit per-case inventory | 173 selected; 132 deliberately deselected |
 | Selected skips, xfails or xpasses | 3 resource skips in historical ordinary run | 0 in the split core gates |
-| Statement coverage | 2161/2667 = 81.03% | 2365/2686 = 88.05% |
-| Branch coverage | 725/1068 = 67.88% | 870/1076 = 80.86% |
+| Statement coverage | 2161/2667 = 81.03% | 2379/2697 = 88.21% |
+| Branch coverage | 725/1068 = 67.88% | 875/1078 = 81.17% |
 | Production Python files measured | Complete baseline package | All 21 current files |
 | Coverage exclusions | 0 | 0 |
 
@@ -98,6 +100,31 @@ Base Ruff checks and the production `B,RUF021` checks passed locally. The
 review addresses the concrete defects above; it does not claim that all
 possible code smells or defects have been eliminated.
 
+## Request and dashboard polish
+
+The follow-up specification precedes its implementation. It adds **32 pytest
+cases: six unit and 26 integration**, with actual ASGI/SQLite state checks. The
+complete core counts above include them. An independent focused review reran
+these cases plus the retained valid webhook/fresh-signature/replay contract:
+**33 passed, no skips**. The updated real HTTP v0.2 script also proves malformed
+authentication and unsafe JSON cannot add workflows or replace valid records.
+
+| Reproduced problem | Correction and review evidence |
+| --- | --- |
+| Non-ASCII webhook timestamp/signature caused 500 | Bounded ASCII timestamp and signature-shape validation returns fixed 401 before limiter, receipts or submissions; valid constant-time HMAC verification and replay protection remain intact |
+| Rejected values broke the default validation response; nested memory metadata could poison later reads | A scoped 422 handler omits input/context and escapes invalid error-string scalars; memory metadata is validated before writes while preserving the previous size rule and original records |
+| The dashboard displayed structured errors as `[object Object]` | Bounded field/message formatting preserves useful validation details and handles non-JSON HTTP failures without displaying raw intermediary HTML |
+| A lost successful submission response let a UI retry create a second run | A cryptographic memory-only key follows the unresolved payload/credential; actual committed responses are discarded before retry, with duplicate recognition and one durable execution |
+| A corrupted successful acknowledgement could prematurely discard the retry key | Independent review reproduced a lone-surrogate ID failure; canonical UUID and boolean acknowledgement validation now retains uncertain state for malformed responses, including path/control IDs |
+| Production examples disagreed about tenant identity and used short sample tokens | Exact README bootstrap/shell commands generated distinct credentials, coherent maps and owner-only files; real settings/authentication and repeat-run non-overwrite checks passed in paths with spaces |
+
+Successful acknowledgements or changed logical inputs create a new submission
+identity. Repeating an unchanged input event preserves it. Obsolete responses
+cannot clear newer state. Reload discards in-memory credentials and pending
+identity, so the README instructs users to inspect existing runs before
+resubmitting after reload. Browser execution remains a separate required gate;
+Node handler probes and API tests are not counted as Chromium checks.
+
 ## Actual process and transport evidence
 
 [e2e_support.py](../tests/e2e_support.py) starts the actual RAG API, Agent API,
@@ -127,14 +154,14 @@ lease expiration or cancellation. Success cleanup removed temporary data and
 reaped children. A separate local injection of an unavailable startup service
 also confirmed cleanup of both created children and all temporary data.
 
-The existing [v0.2 gate](../tests/e2e_v02.py) passed its six lifecycle check
+The updated [v0.2 gate](../tests/e2e_v02.py) passed its seven lifecycle check
 groups, and [v0.3](../tests/e2e_v03.py) passed its three evidence/terminal-state
 groups again with SQLite. These check groups overlap some existing contracts;
-they are reported separately from the 268 pytest cases.
+they are reported separately from the 300 pytest cases.
 
 ## Browser evidence and remaining CI gates
 
-The browser gate requires eight completed checks:
+The browser gate requires twelve completed checks:
 
 1. Submit, refresh and stream a successful workflow with actual source citations.
 2. Preserve the typed insufficient-evidence refusal and its terminal failed state.
@@ -144,6 +171,10 @@ The browser gate requires eight completed checks:
 6. Discard an older genuine status response delivered after the selected workflow changes.
 7. Discard an older genuine submission response delivered after credentials/view change, while proving the backend submission actually completed.
 8. Keep credentials in Authorization headers/page memory, absent from URLs, request bodies, browser storage and the reloaded page.
+9. Show useful real field-validation errors and bounded non-JSON error fallbacks; a later rejection must preserve an earlier uncertain identity.
+10. Discard a real committed POST response, then retry the unchanged form with the original key; recover the same run and one execution.
+11. Recover real committed submissions after seven malformed acknowledgement variants, including invalid Unicode/path/control IDs, with no repeated execution.
+12. Start fresh identities after acknowledged success or changed inputs, fence obsolete acknowledgements, and keep pending keys out of storage and reloads.
 
 The two stale-response cases buffer genuine API responses at the browser
 transport; they do not fabricate service results or add production test hooks.
@@ -155,14 +186,21 @@ Local Chromium exists, but startup fails because UNIX sockets are prohibited
 in this execution environment; the managed-browser download also returned
 HTTP 403. The local browser report records **failure, 0/8 completed**, with
 services cleaned up. That local run supplies no screenshot or visual-interaction success. The separate
-CI Chromium run did execute all eight checks, produce four screenshots and
+baseline CI Chromium run did execute all eight checks, produce four screenshots and
 report zero page errors with cleanup completed.
+
+The new actual-script Node DOM probes used real RAG/API/worker services to
+verify submission behavior and seven malformed acknowledgement variants. Their
+reports are `polish-dashboard-handler-local.json` and
+`polish-acknowledgement-local.json`; the latter recovered seven actual commits
+in fourteen POSTs with zero repeated executions. These probes are not browser
+evidence. The twelve-check Chromium report is required for this revision.
 
 | Required current-revision CI gate | Evidence required before claiming completion |
 | --- | --- |
 | Core unit/integration | Inventories, JUnit, complete-package JSON/XML/HTML coverage and both fixed floors |
 | SQLite process recovery | Six completed checks in `resilience-sqlite.json` |
-| Actual Chromium | Eight completed checks in `browser.json`, representative screenshots and failure diagnostics when applicable |
+| Actual Chromium | Twelve completed checks in `browser.json`, representative screenshots and failure diagnostics when applicable |
 | PostgreSQL/Redis/S3 | All five external pytest cases execute without skips; actual accounting migration/large charges, concurrency, Redis and S3 behavior |
 | PostgreSQL v0.2/v0.3/resilience | Real HTTP, worker and MCP flows; separate disposable databases prevent unfinished work from another harness affecting claims |
 | Docker Compose | All three actual service containers and their external HTTP workflow |
@@ -171,7 +209,7 @@ report zero page errors with cleanup completed.
 
 The [CI workflow](../.github/workflows/ci.yml) provisions these resources and
 pins all Agent companion checkouts to RAG commit
-`c015d300ad183117b22f7329bd697ccd93287fcd`. The first remote execution exposed duplicate PostgreSQL aggregate labels and a
+`f62e088a58c0bbcbda84d8db4df51b6cc84b863f`. The first remote execution exposed duplicate PostgreSQL aggregate labels and a
 fixture URL-encoding defect. Distinct SQL aggregate aliases preserve both token
 and cost totals; percent-encoded connection options preserve the disposable
 schema path. Both actual migration/accounting cases remain required on the
