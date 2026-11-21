@@ -196,6 +196,19 @@ reports are `polish-dashboard-handler-local.json` and
 in fourteen POSTs with zero repeated executions. These probes are not browser
 evidence. The twelve-check Chromium report is required for this revision.
 
+The first expanded [Chromium CI run](https://github.com/MasterLKH180cm/agentic-system/actions/runs/44898791285/job/136830038536)
+completed **11/12 checks**, including all seven malformed acknowledgements,
+before the final overlap case raised `Route is already handled`. The two
+one-use interceptors expired while an earlier genuine response was still held;
+Playwright removed the last interception pattern and resumed that pending
+route before the harness tried to fulfill it. One persistent dispatcher now
+owns both overlapping requests until their actual responses settle, then is
+explicitly removed. The newer response must still be committed and discarded,
+the obsolete acknowledgement must not affect its view or retry identity, and
+the final retry must recover the same run with one execution. All twelve
+checks remain required on the corrected revision; the failed run is not
+counted as completed browser evidence.
+
 | Required current-revision CI gate | Evidence required before claiming completion |
 | --- | --- |
 | Core unit/integration | Inventories, JUnit, complete-package JSON/XML/HTML coverage and both fixed floors |

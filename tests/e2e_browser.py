@@ -231,25 +231,36 @@ def run_submission_polish(page, services, report, artifacts):
     # A stale acknowledged response must not clear the newer pending identity.
     page.locator("#token").fill(services.key)
     page.locator("#mode").select_option("dag")
-    page.locator("#goal").fill("Calculate 80 + 1")
+    older_goal, later_goal = "Calculate 80 + 1", "Calculate 80 + 2"
+    page.locator("#goal").fill(older_goal)
     delayed = []
+    committed.clear()
 
-    def hold_acknowledgement(route):
-        actual = route.fetch()
-        require(actual.status == 202, "Held response was not a real acknowledgement")
-        delayed.append((route, actual))
+    def overlapping_acknowledgements(route):
+        require(route.request.method == "POST", "Unexpected request during overlapping submissions")
+        goal = route.request.post_data_json["goal"]
+        if goal == older_goal:
+            require(not delayed, "Older submission was intercepted twice")
+            actual = route.fetch()
+            require(actual.status == 202, "Held response was not a real acknowledgement")
+            delayed.append((route, actual))
+        else:
+            require(goal == later_goal and not committed, "Unexpected newer submission")
+            discard_committed_response(route)
 
-    page.route(url, hold_acknowledgement, times=1)
+    # Expiring the last handler resumes other in-flight routes. Keep this handler
+    # registered until both the delayed and deliberately lost responses settle.
+    page.route(url, overlapping_acknowledgements)
     page.locator("#submit").click()
     browser_eventually(page, lambda: delayed, description="older actual acknowledgement held")
-    later_goal = "Calculate 80 + 2"
     page.locator("#goal").fill(later_goal)
-    committed.clear()
-    page.route(url, discard_committed_response, times=1)
-    newer, _ = click_submission(page, services)
-    with page.expect_response(lambda response: response.url == url) as delivered:
+    newer, result = click_submission(page, services)
+    require(result is None and len(committed) == 1, "Newer committed response was not discarded")
+    with page.expect_response(lambda response: response.url == url and
+                              response.request.post_data_json["goal"] == older_goal) as delivered:
         delayed[0][0].fulfill(response=delayed[0][1])
     delivered.value.finished()
+    page.unroute(url, overlapping_acknowledgements)
     flush_render(page)
     require(displayed_result(page) is None and page.locator("#run").input_value() == "",
             "Obsolete acknowledgement overwrote the unresolved newer submission")
