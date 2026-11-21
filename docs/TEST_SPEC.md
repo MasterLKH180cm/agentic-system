@@ -116,3 +116,22 @@ promotion result visible. Publish final counts, scopes, branch coverage,
 concrete smell corrections and unresolved limits in a review report.
 
 Commit this specification before implementing tests and refactors.
+
+## Review amendment: connection setup and PostgreSQL accounting width
+
+Independent review of the specified accounting and resource-lifetime paths
+identified two additional concrete defects. An acquired Store SQLite connection
+must close even if a setup PRAGMA fails, under the same cleanup contract as the
+limiter and RAG Store. Add a tracked real-connection regression.
+
+PostgreSQL's existing schema keeps accounting counters and micro-USD costs in
+32-bit INTEGER columns, while valid configured prices and validated provider
+counters can exceed that range. Before claiming cross-backend accounting
+equivalence, use BIGINT for only model_usage input_tokens, output_tokens,
+charged_tokens and cost_microusd. Migrate existing INTEGER accounting columns
+inside the existing serialized initialization transaction without dropping data
+or widening unrelated columns. Verify both fresh schema and migration using an
+isolated real PostgreSQL schema, retain existing records, repeat initialization
+idempotently, and reserve/settle values above the 32-bit boundary through Store.
+Pure schema translation tests must also prove unrelated integer types and bound
+values are preserved. The existing frozen model/runtime behavior stays unchanged.
