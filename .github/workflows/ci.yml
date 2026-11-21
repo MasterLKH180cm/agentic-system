@@ -2,11 +2,19 @@ name: Agentic System CI
 
 on:
   push:
-    branches: ["master", "feat/**"]
+    branches: ["master"]
   pull_request:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  ORT_DISABLE_TELEMETRY: "1"
+  HF_HUB_DISABLE_TELEMETRY: "1"
 
 jobs:
   integration:
@@ -25,7 +33,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 76ac10b63dac8b3ecc4cd099222f6ee6cc489877 # tested RAGs master squash commit
+          ref: f62e088a58c0bbcbda84d8db4df51b6cc84b863f # exact companion v0.3 implementation commit
           path: external/RAGs
       - uses: actions/setup-python@v5
         with:
@@ -33,12 +41,49 @@ jobs:
           cache: pip
       - name: Install both services
         run: |
-          python -m pip install -e ".[dev,mcp]"
-          python -m pip install -e ./external/RAGs
+          python -m pip install -e ".[dev,mcp,telemetry]"
+          python -m pip install -e "./external/RAGs[mcp]"
       - name: Static analysis
-        run: ruff check agentic tests --select E4,E7,E9,F
-      - name: Integration tests
-        run: pytest -q
+        run: |
+          ruff check agentic tests scripts conftest.py --select E4,E7,E9,F
+          ruff check agentic --select B,RUF021
+      - name: Unit contracts with explicit inventory
+        run: >-
+          python -m pytest -q -m unit --require-no-skips
+          --test-inventory reports/testing/inventory-unit.json
+          --junitxml reports/testing/junit-unit.xml
+          --cov=agentic --cov-branch --cov-config=pyproject.toml --cov-report=json:reports/testing/coverage-unit.json
+      - name: Integration contracts without optional external resources
+        run: >-
+          python -m pytest -q -m "integration and not external" --require-no-skips
+          --test-inventory reports/testing/inventory-integration.json
+          --junitxml reports/testing/junit-integration.xml
+          --cov=agentic --cov-branch --cov-config=pyproject.toml --cov-append
+          --cov-report=json:reports/testing/coverage-core.json
+          --cov-report=xml:reports/testing/coverage-core.xml
+          --cov-report=html:reports/testing/coverage-html
+      - name: Enforce complete-package line and branch floors
+        run: python scripts/check_coverage.py
+      - name: Publish test inventory, JUnit and coverage evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agentic-core-test-evidence
+          path: reports/testing/
+          if-no-files-found: error
+      - name: v0.2 lifecycle, bounded runtime, approvals, artifacts and MCP
+        run: python tests/e2e_v02.py
+      - name: v0.3 evidence decisions, terminal outcomes and MCP
+        run: python tests/e2e_v03.py
+      - name: Real process-loss, cancellation, retry and SSE recovery
+        run: python tests/e2e_resilience.py --report reports/testing/resilience-sqlite.json
+      - name: Publish SQLite process recovery evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-sqlite-resilience
+          path: reports/testing/resilience-sqlite.json
+          if-no-files-found: error
       - name: Real two-service end-to-end smoke test
         shell: bash
         run: |
@@ -97,7 +142,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 76ac10b63dac8b3ecc4cd099222f6ee6cc489877
+          ref: f62e088a58c0bbcbda84d8db4df51b6cc84b863f # companion v0.3
           path: external/RAGs
       - name: Put the sibling RAGs build context in place
         run: |
@@ -191,3 +236,303 @@ jobs:
       - name: Clean up the stack
         if: always()
         run: docker compose down -v --remove-orphans
+
+  external-storage:
+    name: Real PostgreSQL, Redis and S3 integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: agenttest
+          POSTGRES_PASSWORD: disposable-ci-password
+          POSTGRES_DB: agenttest
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      AGENT_ENV: test
+      RAGS_ENV: test
+      AGENT_TEST_POSTGRES_URL: postgresql://agenttest:disposable-ci-password@127.0.0.1:5432/agenttest
+      AGENT_TEST_REDIS_URL: redis://127.0.0.1:6379/0
+      AGENT_TEST_S3_ENDPOINT: http://127.0.0.1:9000
+      AWS_ACCESS_KEY_ID: agent-test-user
+      AWS_SECRET_ACCESS_KEY: disposable-ci-s3-password
+      AWS_DEFAULT_REGION: us-east-1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout RAGs dependency
+        uses: actions/checkout@v4
+        with:
+          repository: MasterLKH180cm/RAGs
+          ref: f62e088a58c0bbcbda84d8db4df51b6cc84b863f # companion v0.3
+          path: external/RAGs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[dev,mcp,postgres,storage,telemetry]" -e "./external/RAGs[mcp]"
+      - name: Checkout the fixed upstream S3 server source
+        uses: actions/checkout@v4
+        with:
+          repository: minio/minio
+          ref: 9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a # RELEASE.2025-10-15T17-29-55Z
+          path: external/minio
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.8"
+          cache-dependency-path: external/minio/go.sum
+      - name: Build the actual S3-compatible server
+        working-directory: external/minio
+        env:
+          CGO_ENABLED: "0"
+        run: go build -mod=readonly -p 2 -tags kqueue -trimpath -o "$RUNNER_TEMP/agentic-minio" .
+      - name: Start disposable S3-compatible server
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/agentic-minio-data"
+          MINIO_ROOT_USER="$AWS_ACCESS_KEY_ID" \
+          MINIO_ROOT_PASSWORD="$AWS_SECRET_ACCESS_KEY" MINIO_BROWSER=off \
+            nohup "$RUNNER_TEMP/agentic-minio" server \
+              --address 127.0.0.1:9000 --console-address 127.0.0.1:9001 \
+              "$RUNNER_TEMP/agentic-minio-data" \
+              > "$RUNNER_TEMP/agentic-minio.log" 2>&1 < /dev/null &
+          minio_pid=$!
+          printf '%s\n' "$minio_pid" > "$RUNNER_TEMP/agentic-minio.pid"
+          for attempt in $(seq 1 60); do
+            if curl -fsS --max-time 2 http://127.0.0.1:9000/minio/health/ready; then
+              break
+            fi
+            kill -0 "$minio_pid"
+            sleep 1
+          done
+          curl -fsS --max-time 2 http://127.0.0.1:9000/minio/health/ready
+      - name: Actual external service contracts
+        run: >-
+          python -m pytest -q tests/test_platform.py tests/test_postgres_accounting.py -m external --require-no-skips
+          --test-inventory reports/testing/inventory-storage.json
+          --junitxml reports/testing/junit-storage.xml
+      - name: Create isolated PostgreSQL databases for each E2E harness
+        run: |
+          python - <<'PYTHON'
+          import os
+          import psycopg
+          from psycopg import sql
+          with psycopg.connect(os.environ["AGENT_TEST_POSTGRES_URL"], autocommit=True) as connection:
+              for name in ("agentv02", "agentv03", "agentrecovery"):
+                  connection.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+          PYTHON
+      - name: Full API and worker flow using PostgreSQL
+        env:
+          AGENT_E2E_POSTGRES_URL: postgresql://agenttest:disposable-ci-password@127.0.0.1:5432/agentv02
+        run: python tests/e2e_v02.py
+      - name: v0.3 evidence decisions and MCP using PostgreSQL
+        env:
+          AGENT_E2E_POSTGRES_URL: postgresql://agenttest:disposable-ci-password@127.0.0.1:5432/agentv03
+        run: python tests/e2e_v03.py
+      - name: Real process-loss and cancellation recovery using PostgreSQL
+        env:
+          AGENT_E2E_POSTGRES_URL: postgresql://agenttest:disposable-ci-password@127.0.0.1:5432/agentrecovery
+        run: python tests/e2e_resilience.py --report reports/testing/resilience-postgres.json
+      - name: Publish actual storage and recovery evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-postgres-redis-s3-evidence
+          path: reports/testing/
+          if-no-files-found: error
+      - name: Capture object-store diagnostics on failure
+        if: failure()
+        run: tail -n 100 "$RUNNER_TEMP/agentic-minio.log" || true
+      - name: Remove disposable object store
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$RUNNER_TEMP/agentic-minio.pid" ]]; then
+            kill "$(cat "$RUNNER_TEMP/agentic-minio.pid")" || true
+          fi
+
+  research-chain:
+    name: Actual ${{ matrix.engine }} to Agent worker and MCP
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [raptor, lightrag]
+    env:
+      RAGS_ENV: test
+      AGENT_ENV: test
+      RAGS_MODEL_CACHE: /tmp/agent-research-models
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout the exact RAGs research implementation
+        uses: actions/checkout@v4
+        with:
+          repository: MasterLKH180cm/RAGs
+          ref: f62e088a58c0bbcbda84d8db4df51b6cc84b863f # companion v0.3
+          path: external/RAGs
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            external/RAGs/pyproject.toml
+            external/RAGs/requirements/research-*.txt
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/agent-research-models
+          key: agent-research-bge-v03-${{ runner.os }}
+      - name: Install Agent and both HTTP-backed MCP bridges
+        run: python -m pip install -e ".[dev,mcp,telemetry]" -e "./external/RAGs[mcp]"
+      - name: Install the isolated pinned upstream environment
+        shell: bash
+        run: |
+          RAGS_RESEARCH_BOOTSTRAP_PYTHON="$(command -v python)" \
+            bash external/RAGs/scripts/install_research.sh \
+              "${{ matrix.engine }}" "$RUNNER_TEMP/research-venv"
+      - name: Actual upstream through RAG HTTP and independent Agent worker
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/research-venv/bin/python" external/RAGs/scripts/e2e_research_v03.py \
+            --engine "${{ matrix.engine }}" \
+            --model-cache "$RAGS_MODEL_CACHE" \
+            --agent-python "$(command -v python)" \
+            --agent-script "$GITHUB_WORKSPACE/tests/e2e_v03.py" \
+            --report "reports/ci-research-${{ matrix.engine }}-agent-http.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-${{ matrix.engine }}-http-chain
+          path: reports/ci-research-${{ matrix.engine }}-agent-http.json
+
+  admission-http:
+    name: Frozen Qwen profile through RAG HTTP and Agent worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RAGS_ENV: test
+      AGENT_ENV: test
+      RAGS_MODEL_CACHE: /tmp/agent-answerability-models
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout the exact RAGs admission implementation
+        uses: actions/checkout@v4
+        with:
+          repository: MasterLKH180cm/RAGs
+          ref: f62e088a58c0bbcbda84d8db4df51b6cc84b863f # companion v0.3
+          path: external/RAGs
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            external/RAGs/pyproject.toml
+            external/RAGs/requirements/answerability.txt
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/agent-answerability-models
+          key: agent-qwen-1.7b-70d244cc-v03-${{ runner.os }}
+      - name: Install Agent and both HTTP-backed MCP bridges
+        run: python -m pip install -e ".[dev,mcp,telemetry]" -e "./external/RAGs[mcp]"
+      - name: Install the isolated pinned CPU answerability environment
+        shell: bash
+        run: |
+          PYTHON="$(command -v python)" \
+            bash external/RAGs/scripts/install-answerability.sh "$RUNNER_TEMP/admission-venv"
+      - name: Download and verify the fixed public checkpoint
+        run: |
+          "$RUNNER_TEMP/admission-venv/bin/python" - <<'PY'
+          import os
+          from rags.admission import load_profile
+          from rags.answerability import AnswerabilityScorer
+
+          scorer = AnswerabilityScorer(os.environ["RAGS_MODEL_CACHE"], allow_download=True)
+          scorer.verify(load_profile("external/RAGs/profiles/admission-qwen-v03.json"))
+          print("Pinned artifacts, tokenizer, prompt and runtime match the frozen profile")
+          PY
+      - name: Two calibration cases through actual admission HTTP and Agent execution
+        run: |
+          python tests/e2e_admission_v03.py \
+            --rag-python "$RUNNER_TEMP/admission-venv/bin/python" \
+            --profile external/RAGs/profiles/admission-qwen-v03.json \
+            --model-cache "$RAGS_MODEL_CACHE" \
+            --calibration external/RAGs/examples/admission_calibration_v03.json \
+            --report reports/ci-agent-admission-http-v03.json
+      - name: Identify the integration-only scope
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path("reports/ci-agent-admission-http-v03.json")
+          if not path.exists():
+              raise SystemExit("The actual-profile integration report was not produced")
+          report = json.loads(path.read_text())
+          lines = ["## Actual admission HTTP integration", "",
+                   "Contract status: **" + report["status"] + "**",
+                   "Frozen profile: " + report["profile_id"],
+                   "Two existing calibration cases exercise acceptance and refusal through the worker and MCP.",
+                   "This job does not rescore holdout quality, change thresholds, or approve profile promotion."]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as output:
+              output.write("\n".join(lines) + "\n")
+          assert report["status"] == "passed"
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-frozen-admission-http
+          path: reports/ci-agent-admission-http-v03.json
+
+  browser:
+    name: Actual Chromium workflow and stream ownership
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      AGENT_ENV: test
+      RAGS_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout the exact RAGs companion
+        uses: actions/checkout@v4
+        with:
+          repository: MasterLKH180cm/RAGs
+          ref: f62e088a58c0bbcbda84d8db4df51b6cc84b863f # exact companion implementation
+          path: external/RAGs
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install both services and pinned browser driver
+        run: python -m pip install -e ".[dev,mcp,telemetry,e2e]" -e "./external/RAGs[mcp]"
+      - name: Provision actual Chromium and its system dependencies
+        run: python -m playwright install --with-deps chromium
+      - name: Drive the actual UI, APIs and independent worker
+        run: >-
+          python tests/e2e_browser.py --report reports/testing/browser.json
+          --artifacts reports/testing/browser-artifacts
+      - name: Publish browser outcomes and screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-real-browser-evidence
+          path: reports/testing/
+          if-no-files-found: error

@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 from pathlib import Path
 import sqlite3
 import time
@@ -16,13 +17,27 @@ from typing import Iterator
 import uuid
 
 from agentic.schemas import WorkflowIn
+from agentic.admission import safe_metadata
+
+
+class BudgetExceeded(ValueError):
+    """A request was stopped before exceeding the configured reservation budget."""
+
+
+class QueueFull(ValueError):
+    pass
+
+
+class LeaseLost(RuntimeError):
+    pass
 
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
  id TEXT PRIMARY KEY, tenant TEXT NOT NULL, goal TEXT NOT NULL,
  status TEXT NOT NULL, idempotency_key TEXT, request_hash TEXT NOT NULL,
- created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ specification TEXT NOT NULL DEFAULT '{}'
 );
 CREATE UNIQUE INDEX IF NOT EXISTS runs_idempotency
  ON runs(tenant,idempotency_key) WHERE idempotency_key IS NOT NULL;
@@ -33,7 +48,9 @@ CREATE TABLE IF NOT EXISTS steps (
  attempts INTEGER NOT NULL DEFAULT 0, available_at REAL NOT NULL DEFAULT 0,
  lease_until REAL, lease_token TEXT, approved INTEGER NOT NULL DEFAULT 0,
  approval_required INTEGER NOT NULL DEFAULT 0,
- result TEXT, error TEXT,
+ result TEXT, error TEXT, checkpoint TEXT NOT NULL DEFAULT '{}',
+ ordinal INTEGER NOT NULL DEFAULT 0,
+ deadline_at REAL,
  PRIMARY KEY(run_id,id),
  FOREIGN KEY(run_id) REFERENCES runs(id)
 );
@@ -44,6 +61,31 @@ CREATE TABLE IF NOT EXISTS events (
  type TEXT NOT NULL, payload TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS events_run ON events(run_id,id);
+CREATE TABLE IF NOT EXISTS definitions (
+ tenant TEXT NOT NULL, kind TEXT NOT NULL, name TEXT NOT NULL,
+ version INTEGER NOT NULL, definition TEXT NOT NULL, created_at TEXT NOT NULL,
+ PRIMARY KEY(tenant,kind,name,version)
+);
+CREATE TABLE IF NOT EXISTS memories (
+ tenant TEXT NOT NULL, namespace TEXT NOT NULL, id TEXT NOT NULL,
+ content TEXT NOT NULL, metadata TEXT NOT NULL, source_run_id TEXT,
+ expires_at REAL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ PRIMARY KEY(tenant,namespace,id)
+);
+CREATE INDEX IF NOT EXISTS memories_namespace ON memories(tenant,namespace,expires_at);
+CREATE TABLE IF NOT EXISTS model_usage (
+ id TEXT PRIMARY KEY, tenant TEXT NOT NULL, run_id TEXT, route TEXT NOT NULL,
+ purpose TEXT NOT NULL, input_tokens INTEGER, output_tokens INTEGER,
+ charged_tokens INTEGER NOT NULL, cost_microusd INTEGER, status TEXT NOT NULL,
+ created_at TEXT NOT NULL,
+ FOREIGN KEY(run_id) REFERENCES runs(id)
+);
+CREATE INDEX IF NOT EXISTS usage_run ON model_usage(tenant,run_id);
+CREATE TABLE IF NOT EXISTS artifact_refs (
+ tenant TEXT NOT NULL, artifact_id TEXT NOT NULL, run_id TEXT NOT NULL,
+ namespace TEXT NOT NULL, created_at TEXT NOT NULL,
+ PRIMARY KEY(tenant,artifact_id,run_id), FOREIGN KEY(run_id) REFERENCES runs(id)
+);
 """
 
 
@@ -52,22 +94,49 @@ def stamp() -> str:
 
 
 class Store:
-    def __init__(self, path: str):
+    def __init__(
+        self, path: str, *, lease_seconds: float = 180, max_attempts: int = 3,
+        step_timeout_seconds: float = 300,
+    ):
         self.path = path
-        if path != ":memory:":
+        self.is_postgres = path.startswith(("postgresql://", "postgres://"))
+        self.lease_seconds = lease_seconds
+        self.max_attempts = max_attempts
+        self.step_timeout_seconds = step_timeout_seconds
+        if path != ":memory:" and not self.is_postgres:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as conn:
             conn.executescript(SCHEMA)
+            # Additive migration preserves v0.1 runs and their original step order.
+            run_columns = {r[1] for r in conn.execute("PRAGMA table_info(runs)")}
+            step_columns = {r[1] for r in conn.execute("PRAGMA table_info(steps)")}
+            if "specification" not in run_columns:
+                conn.execute("ALTER TABLE runs ADD COLUMN specification TEXT NOT NULL DEFAULT '{}'")
+            if "checkpoint" not in step_columns:
+                conn.execute("ALTER TABLE steps ADD COLUMN checkpoint TEXT NOT NULL DEFAULT '{}'")
+            if "ordinal" not in step_columns:
+                conn.execute("ALTER TABLE steps ADD COLUMN ordinal INTEGER NOT NULL DEFAULT 0")
+                conn.execute("UPDATE steps SET ordinal=rowid")
+            if "deadline_at" not in step_columns:
+                conn.execute("ALTER TABLE steps ADD COLUMN deadline_at REAL")
+            if self.is_postgres:
+                from agentic.postgres import migrate_accounting
+                migrate_accounting(conn)
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
+        if self.is_postgres:
+            from agentic.postgres import connect
+            with connect(self.path) as conn:
+                yield conn
+            return
         conn = sqlite3.connect(self.path, timeout=20)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys=ON")
-        conn.execute("PRAGMA busy_timeout=20000")
-        if self.path != ":memory:":
-            conn.execute("PRAGMA journal_mode=WAL")
         try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.execute("PRAGMA busy_timeout=20000")
+            if self.path != ":memory:":
+                conn.execute("PRAGMA journal_mode=WAL")
             yield conn
             conn.commit()
         except BaseException:
@@ -106,13 +175,16 @@ class Store:
             "UPDATE runs SET status=?,updated_at=? WHERE id=?", (status, stamp(), run_id)
         )
 
-    def submit(self, tenant: str, data: WorkflowIn) -> dict:
+    def submit(
+        self, tenant: str, data: WorkflowIn, *, specification: dict | None = None,
+        request_hash: str | None = None, max_queued_runs: int = 100,
+    ) -> dict:
         assert data.steps is not None
         payload = json.dumps(
             {"goal": data.goal, "steps": [s.model_dump() for s in data.steps]},
             sort_keys=True,
         )
-        signature = hashlib.sha256(payload.encode()).hexdigest()
+        signature = request_hash or hashlib.sha256(payload.encode()).hexdigest()
         run_id = str(uuid.uuid4())
         created = stamp()
         with self.connect() as conn:
@@ -126,19 +198,25 @@ class Store:
                     if row["request_hash"] != signature:
                         raise ValueError("Idempotency key already used with a different workflow")
                     return {"id": row["id"], "duplicate": True}
+            queued = conn.execute(
+                "SELECT COUNT(*) FROM runs WHERE tenant=? "
+                "AND status NOT IN ('completed','failed','cancelled')", (tenant,),
+            ).fetchone()[0]
+            if queued >= max_queued_runs:
+                raise QueueFull("Tenant workflow queue is full")
             conn.execute(
                 "INSERT INTO runs(id,tenant,goal,status,idempotency_key,request_hash,"
-                "created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
+                "created_at,updated_at,specification) VALUES(?,?,?,?,?,?,?,?,?)",
                 (run_id, tenant, data.goal, "queued", data.idempotency_key,
-                 signature, created, created),
+                 signature, created, created, json.dumps(specification or {})),
             )
-            for step in data.steps:
+            for ordinal, step in enumerate(data.steps):
                 conn.execute(
                     "INSERT INTO steps(run_id,id,tool,args,depends_on,status,"
-                    "approval_required) VALUES(?,?,?,?,?,?,?)",
+                    "approval_required,ordinal) VALUES(?,?,?,?,?,?,?,?)",
                     (run_id, step.id, step.tool, json.dumps(step.args),
                      json.dumps(step.depends_on), "pending",
-                     int(step.approval_required)),
+                     int(step.approval_required), ordinal),
                 )
             self.event(conn, tenant, run_id, None, "created", {"steps": len(data.steps)})
         return {"id": run_id, "duplicate": False}
@@ -152,16 +230,18 @@ class Store:
                 return None
             steps = conn.execute(
                 "SELECT id,tool,args,depends_on,status,attempts,approval_required,"
-                "approved,result,error FROM steps WHERE run_id=? ORDER BY rowid", (run_id,)
+                "approved,result,error,checkpoint,deadline_at FROM steps WHERE run_id=? ORDER BY ordinal,id", (run_id,)
             ).fetchall()
             return {
                 **dict(run),
+                "specification": json.loads(run["specification"]),
                 "steps": [
                     {
                         **dict(s),
                         "args": json.loads(s["args"]),
                         "depends_on": json.loads(s["depends_on"]),
                         "result": json.loads(s["result"]) if s["result"] else None,
+                        "checkpoint": json.loads(s["checkpoint"]),
                         "approval_required": bool(s["approval_required"]),
                         "approved": bool(s["approved"]),
                     }
@@ -178,14 +258,14 @@ class Store:
                 )
             ]
 
-    def events(self, tenant: str, run_id: str) -> list[dict]:
+    def events(self, tenant: str, run_id: str, after_id: int = 0, limit: int = 1000) -> list[dict]:
         with self.connect() as conn:
             return [
                 {**dict(r), "payload": json.loads(r["payload"])}
                 for r in conn.execute(
                     "SELECT e.* FROM events e JOIN runs r ON r.id=e.run_id "
-                    "WHERE e.tenant=? AND e.run_id=? AND r.tenant=? ORDER BY e.id",
-                    (tenant, run_id, tenant),
+                    "WHERE e.tenant=? AND e.run_id=? AND r.tenant=? AND e.id>? ORDER BY e.id LIMIT ?",
+                    (tenant, run_id, tenant, after_id, min(1000, max(1, limit))),
                 )
             ]
 
@@ -194,25 +274,43 @@ class Store:
         with self.connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             expired = conn.execute(
-                "SELECT s.run_id,s.id,r.tenant FROM steps s "
+                "SELECT s.run_id,s.id,s.attempts,r.tenant FROM steps s "
                 "JOIN runs r ON r.id=s.run_id "
                 "WHERE s.status='leased' AND s.lease_until<? "
                 "AND r.status NOT IN ('cancelled','failed','completed')",
                 (clock,),
             ).fetchall()
             for row in expired:
+                exhausted = row["attempts"] >= self.max_attempts
                 conn.execute(
-                    "UPDATE steps SET status='pending',lease_token=NULL,lease_until=NULL "
-                    "WHERE run_id=? AND id=?", (row["run_id"], row["id"])
+                    "UPDATE steps SET status=?,error=?,lease_token=NULL,lease_until=NULL "
+                    "WHERE run_id=? AND id=?",
+                    ("failed" if exhausted else "pending", "Lease recovery limit reached" if exhausted else None,
+                     row["run_id"], row["id"]),
                 )
-                self.event(conn, row["tenant"], row["run_id"], row["id"], "lease_expired", {})
+                self.event(conn, row["tenant"], row["run_id"], row["id"],
+                           "lease_exhausted" if exhausted else "lease_expired", {})
+                self.refresh(conn, row["run_id"])
             rows = conn.execute(
-                "SELECT s.*,r.tenant,r.goal FROM steps s JOIN runs r ON r.id=s.run_id "
+                "SELECT s.*,r.tenant,r.goal,r.specification FROM steps s JOIN runs r ON r.id=s.run_id "
                 "WHERE s.status='pending' AND s.available_at<=? "
                 "AND r.status NOT IN ('completed','cancelled','failed') "
-                "ORDER BY r.created_at,s.rowid LIMIT 200", (clock,)
+                "ORDER BY r.created_at,s.ordinal,s.id", (clock,)
             ).fetchall()
+            stopped = set()
             for row in rows:
+                if row["run_id"] in stopped:
+                    continue
+                if row["deadline_at"] is not None and row["deadline_at"] <= clock:
+                    result = {"outcome": "deadline", "stop_reason": "persisted_step_deadline"}
+                    conn.execute(
+                        "UPDATE steps SET status='failed',error='deadline',result=? WHERE run_id=? AND id=?",
+                        (json.dumps(result), row["run_id"], row["id"]),
+                    )
+                    self.event(conn, row["tenant"], row["run_id"], row["id"], "deadline", {})
+                    self.refresh(conn, row["run_id"])
+                    stopped.add(row["run_id"])
+                    continue
                 depends = json.loads(row["depends_on"])
                 if depends:
                     placeholders = ",".join("?" for _ in depends)
@@ -232,10 +330,11 @@ class Store:
                     self.refresh(conn, row["run_id"])
                     continue
                 token = uuid.uuid4().hex
+                deadline = row["deadline_at"] or clock + self.step_timeout_seconds
                 conn.execute(
                     "UPDATE steps SET status='leased',attempts=attempts+1,"
-                    "lease_token=?,lease_until=? WHERE run_id=? AND id=?",
-                    (token, clock + 180, row["run_id"], row["id"]),
+                    "lease_token=?,lease_until=?,deadline_at=? WHERE run_id=? AND id=?",
+                    (token, clock + self.lease_seconds, deadline, row["run_id"], row["id"]),
                 )
                 conn.execute(
                     "UPDATE runs SET status='running',updated_at=? WHERE id=?",
@@ -246,6 +345,9 @@ class Store:
                 return {
                     **dict(row), "lease_token": token,
                     "depends_on": depends, "args": json.loads(row["args"]),
+                    "checkpoint": json.loads(row["checkpoint"]),
+                    "specification": json.loads(row["specification"]),
+                    "deadline_at": deadline,
                 }
             return None
 
@@ -264,33 +366,41 @@ class Store:
         serialized = json.dumps(result)
         if len(serialized) > 100_000:
             raise ValueError("Tool output exceeds 100KB")
+        outcome = result.get("outcome", "success")
+        unsuccessful = outcome in {"insufficient_evidence", "budget_exhausted", "deadline", "policy_denied"}
         with self.connect() as conn:
             cur = conn.execute(
-                "UPDATE steps SET status='completed',result=?,error=NULL,"
+                "UPDATE steps SET status=?,result=?,error=?,"
                 "lease_token=NULL,lease_until=NULL WHERE run_id=? AND id=? "
-                "AND status='leased' AND lease_token=? "
+                "AND status='leased' AND lease_token=? AND lease_until>? "
                 "AND EXISTS (SELECT 1 FROM runs WHERE id=? "
                 "AND status NOT IN ('cancelled','failed','completed'))",
-                (serialized, job["run_id"], job["id"], job["lease_token"], job["run_id"]),
+                ("failed" if unsuccessful else "completed", serialized, outcome if unsuccessful else None,
+                 job["run_id"], job["id"], job["lease_token"], time.time(), job["run_id"]),
             )
             if cur.rowcount == 0:
                 return False  # stale worker or cancelled run; fenced out
             self.event(conn, job["tenant"], job["run_id"], job["id"],
-                       "completed", {"result_bytes": len(serialized)})
+                       "failed" if unsuccessful else "completed", {
+                           "result_bytes": len(serialized), "outcome": outcome,
+                           **safe_metadata(result, job.get("specification", {}).get("rag_admission_profile_ids", [])),
+                       })
             self.refresh(conn, job["run_id"])
             return True
 
-    def fail(self, job: dict, error: str, maximum: int = 3) -> bool:
+    def fail(self, job: dict, error: str, maximum: int | None = None, *, terminal: bool = False) -> bool:
         attempts = job["attempts"] + 1
-        final = attempts >= maximum
+        final = terminal or attempts >= (maximum or self.max_attempts)
         with self.connect() as conn:
             cur = conn.execute(
                 "UPDATE steps SET status=?,error=?,available_at=?,"
                 "lease_token=NULL,lease_until=NULL WHERE run_id=? AND id=? "
-                "AND status='leased' AND lease_token=?",
+                "AND status='leased' AND lease_token=? AND lease_until>? "
+                "AND EXISTS (SELECT 1 FROM runs WHERE id=? "
+                "AND status NOT IN ('cancelled','failed','completed'))",
                 ("failed" if final else "pending", error[:500],
                  time.time() + min(30, 2**attempts), job["run_id"],
-                 job["id"], job["lease_token"]),
+                 job["id"], job["lease_token"], time.time(), job["run_id"]),
             )
             if cur.rowcount == 0:
                 return False
@@ -318,7 +428,7 @@ class Store:
             if not cur.rowcount:
                 return False
             self.event(conn, tenant, run_id, step_id,
-                       "approved" if approved else "rejected", {"reason": reason})
+                       "approved" if approved else "rejected", {"reason_provided": bool(reason)})
             self.refresh(conn, run_id)
             return True
 
@@ -332,3 +442,282 @@ class Store:
             if cur.rowcount:
                 self.event(conn, tenant, run_id, None, "cancelled", {})
             return cur.rowcount > 0
+
+    @staticmethod
+    def fingerprint(data: WorkflowIn) -> str:
+        body = json.dumps(data.model_dump(), sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(body.encode()).hexdigest()
+
+    def duplicate(self, tenant: str, data: WorkflowIn) -> dict | None:
+        if not data.idempotency_key:
+            return None
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT id,request_hash FROM runs WHERE tenant=? AND idempotency_key=?",
+                (tenant, data.idempotency_key),
+            ).fetchone()
+            if row:
+                if row["request_hash"] != self.fingerprint(data):
+                    raise ValueError("Idempotency key already used with a different workflow")
+                return {"id": row["id"], "duplicate": True}
+        return None
+
+    @staticmethod
+    def _owns(conn, job: dict) -> bool:
+        return conn.execute(
+            "SELECT 1 FROM steps s JOIN runs r ON r.id=s.run_id "
+            "WHERE s.run_id=? AND s.id=? AND s.status='leased' "
+            "AND s.lease_token=? AND s.lease_until>? AND r.tenant=? "
+            "AND r.status NOT IN ('completed','failed','cancelled')",
+            (job["run_id"], job["id"], job["lease_token"], time.time(), job["tenant"]),
+        ).fetchone() is not None
+
+    def heartbeat(self, job: dict) -> bool:
+        with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if not self._owns(conn, job):
+                return False
+            conn.execute(
+                "UPDATE steps SET lease_until=? WHERE run_id=? AND id=? AND lease_token=?",
+                (time.time() + self.lease_seconds, job["run_id"], job["id"], job["lease_token"]),
+            )
+            return True
+
+    def checkpoint(self, job: dict, state: dict, *, event: str | None = None, details: dict | None = None) -> bool:
+        serialized = json.dumps(state)
+        if len(serialized) > 350000:
+            raise ValueError("Runtime checkpoint exceeds limit")
+        with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if not self._owns(conn, job):
+                return False
+            conn.execute(
+                "UPDATE steps SET checkpoint=? WHERE run_id=? AND id=? AND lease_token=?",
+                (serialized, job["run_id"], job["id"], job["lease_token"]),
+            )
+            if event:
+                self.event(conn, job["tenant"], job["run_id"], job["id"], event, details or {})
+            return True
+
+    def expand_plan(self, job: dict, steps: list) -> list[str]:
+        """Install a generated DAG atomically with the planner checkpoint."""
+        with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if not self._owns(conn, job):
+                raise LeaseLost("Planner lease is no longer active")
+            row = conn.execute(
+                "SELECT checkpoint FROM steps WHERE run_id=? AND id=?", (job["run_id"], job["id"]),
+            ).fetchone()
+            checkpoint = json.loads(row["checkpoint"])
+            if checkpoint.get("expanded"):
+                return checkpoint["step_ids"]
+            names = {step.id: f"p{index}_{step.id[:48]}" for index, step in enumerate(steps)}
+            for ordinal, step in enumerate(steps, 1):
+                conn.execute(
+                    "INSERT INTO steps(run_id,id,tool,args,depends_on,status,approval_required,ordinal) "
+                    "VALUES(?,?,?,?,?,'pending',?,?)",
+                    (job["run_id"], names[step.id], step.tool, json.dumps(step.args),
+                     json.dumps([names[d] for d in step.depends_on] + [job["id"]]),
+                     int(step.approval_required), ordinal),
+                )
+            ids = list(names.values())
+            conn.execute(
+                "UPDATE steps SET checkpoint=? WHERE run_id=? AND id=?",
+                (json.dumps({"expanded": True, "step_ids": ids}), job["run_id"], job["id"]),
+            )
+            self.event(conn, job["tenant"], job["run_id"], job["id"], "plan_installed", {"steps": len(ids)})
+            return ids
+
+    def register(self, tenant: str, kind: str, definition: dict) -> dict:
+        with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            exists = conn.execute(
+                "SELECT 1 FROM definitions WHERE tenant=? AND kind=? AND name=? AND version=?",
+                (tenant, kind, definition["name"], definition["version"]),
+            ).fetchone()
+            if exists:
+                raise ValueError("Definition versions are immutable")
+            conn.execute(
+                "INSERT INTO definitions(tenant,kind,name,version,definition,created_at) VALUES(?,?,?,?,?,?)",
+                (tenant, kind, definition["name"], definition["version"], json.dumps(definition), stamp()),
+            )
+        return definition
+
+    def definition(self, tenant: str, kind: str, name: str, version: int | None = None) -> dict | None:
+        with self.connect() as conn:
+            sql = "SELECT definition FROM definitions WHERE tenant=? AND kind=? AND name=?"
+            args = [tenant, kind, name]
+            if version is not None:
+                sql += " AND version=?"
+                args.append(version)
+            row = conn.execute(sql + " ORDER BY version DESC LIMIT 1", args).fetchone()
+            return json.loads(row["definition"]) if row else None
+
+    def definitions(self, tenant: str, kind: str) -> list[dict]:
+        with self.connect() as conn:
+            return [json.loads(row["definition"]) for row in conn.execute(
+                "SELECT definition FROM definitions WHERE tenant=? AND kind=? "
+                "ORDER BY name,version DESC LIMIT 300", (tenant, kind),
+            )]
+
+    def put_memory(self, tenant: str, namespace: str, record_id: str, record) -> dict:
+        now = stamp()
+        expires = time.time() + record.ttl_seconds if record.ttl_seconds else None
+        with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if record.source_run_id and conn.execute(
+                "SELECT 1 FROM runs WHERE tenant=? AND id=?", (tenant, record.source_run_id),
+            ).fetchone() is None:
+                raise ValueError("Memory provenance must reference this tenant's workflow")
+            conn.execute(
+                "INSERT INTO memories(tenant,namespace,id,content,metadata,source_run_id,expires_at,created_at,updated_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(tenant,namespace,id) DO UPDATE SET "
+                "content=excluded.content,metadata=excluded.metadata,source_run_id=excluded.source_run_id,"
+                "expires_at=excluded.expires_at,updated_at=excluded.updated_at",
+                (tenant, namespace, record_id, record.content, json.dumps(record.metadata),
+                 record.source_run_id, expires, now, now),
+            )
+        return self.memory(tenant, namespace, record_id)
+
+    @staticmethod
+    def _memory_row(row) -> dict:
+        return {**dict(row), "metadata": json.loads(row["metadata"])}
+
+    def memory(self, tenant: str, namespace: str, record_id: str) -> dict | None:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM memories WHERE tenant=? AND namespace=? AND id=? "
+                "AND (expires_at IS NULL OR expires_at>?)", (tenant, namespace, record_id, time.time()),
+            ).fetchone()
+            return self._memory_row(row) if row else None
+
+    def memory_candidates(self, tenant: str, namespace: str, terms: list[str]) -> list[dict]:
+        sql = "SELECT * FROM memories WHERE tenant=? AND namespace=? AND (expires_at IS NULL OR expires_at>?)"
+        args: list = [tenant, namespace, time.time()]
+        if terms:
+            sql += " AND (" + " OR ".join("LOWER(content) LIKE ?" for _ in terms) + ")"
+            args.extend("%" + term.replace("%", "").replace("_", "") + "%" for term in terms)
+        sql += " ORDER BY updated_at DESC,id LIMIT 500"
+        with self.connect() as conn:
+            return [self._memory_row(row) for row in conn.execute(sql, args)]
+
+    def delete_memory(self, tenant: str, namespace: str, record_id: str) -> bool:
+        with self.connect() as conn:
+            return conn.execute(
+                "DELETE FROM memories WHERE tenant=? AND namespace=? AND id=?", (tenant, namespace, record_id),
+            ).rowcount > 0
+
+    def remaining_model_tokens(self, tenant: str, run_id: str | None, default_limit: int) -> int:
+        """Packing hint only; the following atomic reservation is authoritative."""
+        if run_id is None:
+            return default_limit
+        with self.connect() as db:
+            row = db.execute("SELECT specification,status FROM runs WHERE tenant=? AND id=?", (tenant, run_id)).fetchone()
+            if row is None or row["status"] in {"failed", "completed", "cancelled"}:
+                raise LeaseLost("Model packing requires an active tenant workflow")
+            specification = json.loads(row["specification"])
+            used = int(db.execute("SELECT COALESCE(SUM(charged_tokens),0) FROM model_usage WHERE tenant=? AND run_id=?",
+                                  (tenant, run_id)).fetchone()[0])
+            remaining = specification.get("max_model_tokens", default_limit) - used
+            if remaining <= 0:
+                raise BudgetExceeded("Workflow model budget is exhausted")
+            return remaining
+
+    def reserve_usage(
+        self, tenant: str, run_id: str | None, route: str, purpose: str,
+        tokens: int, cost_microusd: int | None, *, default_limit: int = 12000,
+    ) -> str:
+        reservation = uuid.uuid4().hex
+        with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            specification = {}
+            if run_id:
+                row = conn.execute(
+                    "SELECT specification,status FROM runs WHERE tenant=? AND id=?", (tenant, run_id),
+                ).fetchone()
+                if row is None or row["status"] in {"failed", "completed", "cancelled"}:
+                    raise LeaseLost("Model request requires an active tenant workflow")
+                specification = json.loads(row["specification"])
+                usage = conn.execute(
+                    "SELECT COALESCE(SUM(charged_tokens),0) AS spent_tokens,"
+                    "COALESCE(SUM(cost_microusd),0) AS spent_cost "
+                    "FROM model_usage WHERE tenant=? AND run_id=?", (tenant, run_id),
+                ).fetchone()
+                spent_tokens, spent_cost = int(usage["spent_tokens"]), int(usage["spent_cost"])
+            else:
+                spent_tokens, spent_cost = 0, 0
+            budget = specification.get("max_model_tokens", default_limit)
+            cost_budget = specification.get("max_cost_usd")
+            if tokens < 0 or spent_tokens + tokens > budget:
+                raise BudgetExceeded("Token reservation would exceed the workflow budget")
+            if cost_budget is not None and (
+                cost_microusd is None or spent_cost + cost_microusd > math.floor(cost_budget * 1_000_000)
+            ):
+                raise BudgetExceeded("Cost reservation requires prices and sufficient workflow budget")
+            conn.execute(
+                "INSERT INTO model_usage(id,tenant,run_id,route,purpose,charged_tokens,cost_microusd,status,created_at) "
+                "VALUES(?,?,?,?,?,?,?,'reserved',?)",
+                (reservation, tenant, run_id, route, purpose, tokens, cost_microusd, stamp()),
+            )
+            if run_id:
+                self.event(conn, tenant, run_id, None, "model_reserved", {"route": route, "purpose": purpose})
+        return reservation
+
+    def settle_usage(
+        self, reservation: str, *, input_tokens: int | None = None,
+        output_tokens: int | None = None, cost_microusd: int | None = None, status: str = "reported",
+    ) -> None:
+        with self.connect() as conn:
+            # The reserved-state check, final charge and event are one transition.
+            # Retried or concurrent settlement must preserve the first result.
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT * FROM model_usage WHERE id=?", (reservation,)).fetchone()
+            if not row or row["status"] != "reserved":
+                return
+            reported = input_tokens is not None and output_tokens is not None
+            conn.execute(
+                "UPDATE model_usage SET input_tokens=?,output_tokens=?,charged_tokens=?,cost_microusd=?,status=? WHERE id=?",
+                (input_tokens, output_tokens, input_tokens + output_tokens if reported else row["charged_tokens"],
+                 cost_microusd if reported else row["cost_microusd"], status, reservation),
+            )
+            if row["run_id"]:
+                self.event(conn, row["tenant"], row["run_id"], None, "model_usage", {
+                    "route": row["route"], "purpose": row["purpose"], "status": status,
+                    "input_tokens": input_tokens, "output_tokens": output_tokens,
+                })
+
+    def usage(self, tenant: str, run_id: str | None = None) -> dict:
+        sql = "SELECT * FROM model_usage WHERE tenant=?"
+        args = [tenant]
+        if run_id:
+            sql += " AND run_id=?"
+            args.append(run_id)
+        with self.connect() as conn:
+            records = [dict(row) for row in conn.execute(sql + " ORDER BY created_at,id", args)]
+        known_cost = sum(row["cost_microusd"] or 0 for row in records) / 1_000_000
+        cost_complete = all(row["cost_microusd"] is not None for row in records)
+        return {
+            "calls": records, "charged_tokens": sum(row["charged_tokens"] for row in records),
+            "estimated_cost_usd": known_cost if cost_complete else None,
+            "known_cost_usd": known_cost, "cost_complete": cost_complete,
+            "usage_complete": all(row["status"] == "reported" for row in records),
+        }
+
+    def register_artifact(self, job: dict, reference: dict) -> bool:
+        with self.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if not self._owns(conn, job):
+                return False
+            conn.execute(
+                "INSERT INTO artifact_refs(tenant,artifact_id,run_id,namespace,created_at) VALUES(?,?,?,?,?) "
+                "ON CONFLICT(tenant,artifact_id,run_id) DO NOTHING",
+                (job["tenant"], reference["artifact_id"], job["run_id"],
+                 job.get("specification", {}).get("memory_namespace", "default"), stamp()),
+            )
+            return True
+
+    def artifact_namespaces(self, tenant: str, artifact_id: str) -> list[str]:
+        with self.connect() as conn:
+            return [row["namespace"] for row in conn.execute(
+                "SELECT namespace FROM artifact_refs WHERE tenant=? AND artifact_id=?", (tenant, artifact_id),
+            )]

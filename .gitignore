@@ -228,3 +228,9 @@ __marimo__/
 *.db-shm
 *.db-wal
 .ruff_cache/
+
+# Generated test evidence (published by CI; summaries live in docs)
+.coverage
+.coverage.*
+htmlcov/
+reports/testing/
