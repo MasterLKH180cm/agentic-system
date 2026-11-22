@@ -1,7 +1,8 @@
-# Agentic System v0.3 architecture
+# Agentic System v0.4 architecture
 
 This document describes the current implementation. The acceptance contract is
-[SPEC_V03.md](SPEC_V03.md), extending [SPEC_V02.md](SPEC_V02.md). Current checks
+[SPEC_V04.md](SPEC_V04.md), extending [SPEC_V03.md](SPEC_V03.md) and
+[SPEC_V02.md](SPEC_V02.md). The historical v0.3 checks
 are in [IMPLEMENTATION_REVIEW_V03.md](IMPLEMENTATION_REVIEW_V03.md); the
 [v0.2 review](IMPLEMENTATION_REVIEW.md) remains a historical record.
 
@@ -16,9 +17,55 @@ are in [IMPLEMENTATION_REVIEW_V03.md](IMPLEMENTATION_REVIEW_V03.md); the
 | Model gateway | Agent planning and synthesis, ordered purpose routes, reservations, usage reconciliation, output allowances |
 | Artifact backend | Bounded content-addressed JSON objects in local storage or configured S3 |
 
-The default Compose deployment uses three services and local SQLite volumes.
-Advanced adapters use explicit process configuration or a Compose override;
-the baseline Compose environment does not forward every optional setting.
+The default Compose deployment runs four services: PostgreSQL 17 with pgvector
+0.8.7, the Agent API, an independent worker and RAGs. Agent and RAG use separate
+databases and non-superuser application roles. RAG owns the native pgvector
+knowledge index; Agent memory remains lexical. PostgreSQL has no published host
+port, and the two HTTP interfaces bind to localhost. Named application volumes
+retain artifacts, caches and legacy SQLite files.
+
+The credential bootstrap creates separate database/admin, requester, approver
+and RAG credentials in private files. API and worker receive the same explicit
+operational and feature settings. RAG receives its own provider/chunker/tokenizer
+configuration and feature file. Optional storage/model adapters still need
+their extras and configuration. Custom model-route credential variable names
+require an explicit API/worker Compose override.
+
+## Configuration and feature constraints
+
+`Settings` reads operational environment variables once per process.
+`AGENT_FEATURES_FILE` supplies a JSON boolean map; `AGENT_FEATURES_JSON`
+overrides individual entries. The eighteen-key manifest in `agentic/features.py`
+controls optional interfaces, orchestration modes, tools, model generation,
+fallback and telemetry. Unknown keys, non-booleans and invalid selected files
+fail startup. Permissions do not bypass provider/dependency requirements.
+
+```mermaid
+flowchart TD
+    Settings["Feature file and environment overrides"] --> APIFlags["API feature permissions"]
+    Request["Authenticated submission"] --> Policy["Resolve definitions and mandatory policy"]
+    APIFlags --> Policy
+    Policy --> Snapshot["Persist feature snapshot with run"]
+    Snapshot --> Check["Intersect snapshot with current worker permissions"]
+    Current["Worker settings"] --> Check
+    Check -->|Disabled| Denied["Durable policy_denied outcome"]
+    Check -->|Allowed| Tool["Lease-fenced tool or model execution"]
+```
+
+Submission checks the selected mode and tools before committing a run. Execution
+checks include automatically planned tools and memory use. Disabling a feature
+can block queued or resumed work; later enabling it cannot expand a run's
+snapshot. Authentication, tenant/namespace policy, budgets, evidence refusal,
+lease fencing and separate approvals are always enforced. Disabled approval
+never grants an effect, disabled artifacts create no S3 client, and configured
+online generation cannot silently become an offline success.
+
+Authenticated `/capabilities` returns the resolved boolean map, enabled modes
+and tools, redacted storage identity and model permissions. The UI and shipped
+MCP bridge reflect these capabilities; server-side guards remain authoritative.
+MCP also rechecks permissions when invoked. UI/docs routes are absent when
+those interfaces are disabled; other disabled operations return an explicit
+`403 feature_disabled`. Feature changes require API and worker recreation.
 
 ## Submission and definition snapshots
 
@@ -151,13 +198,20 @@ not a whole-system spending cap.
 
 | Backend | Implemented behavior | Operational boundary |
 | --- | --- | --- |
-| SQLite | WAL, transactions, migration of existing workflow columns | API and workers must share a local file/volume |
-| PostgreSQL | Same Store contract through bound SQL parameters; database-local advisory lock serializes transactions | Shared-state correctness verified; no `SKIP LOCKED` queue or throughput claim |
+| PostgreSQL (Compose default) | Same Store contract through bound SQL parameters; database-local advisory lock serializes transactions | Shared-state correctness verified; no `SKIP LOCKED` queue or throughput claim |
+| SQLite (explicit development) | WAL, transactions, migration of existing workflow columns | API and workers must share a local file/volume |
 | Local artifacts | Tenant-keyed paths, atomic writes, SHA-256 integrity check | Shared artifact storage required across readers/writers |
 | S3-compatible artifacts | Configured bucket, bounded requests, tenant-keyed object names, integrity verification | Requires `storage` extra; actual S3-compatible CI service is tested, cloud deployment is separate |
 | SQLite rate limiter | Atomic fixed-minute counters shared through a local limiter file | A PostgreSQL workflow DSN does not make the default limiter distributed |
 | Redis rate limiter | Atomic shared counter/expiry through Redis | Actual Redis CI service is tested; it is not a task queue |
 | OTLP HTTP | Optional safe-attribute traces, operation counts and duration metrics | Requires telemetry extra and a collector; export delivery depends on that collector |
+
+`AGENT_DATABASE_URL` selects the workflow PostgreSQL store. With it unset,
+`AGENT_DB_PATH` retains the explicit SQLite development path. Selecting a new
+PostgreSQL database does not migrate existing Agent history; no automatic
+SQLite-to-PostgreSQL workflow importer is supplied. Preserve and back up the
+legacy store or plan a separately reviewed migration. The RAG repository has
+its own explicit atomic knowledge-store importer.
 
 Configuration never silently substitutes SQLite for a configured PostgreSQL
 store or local files for a configured S3 backend. Adapters validate required

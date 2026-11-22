@@ -10,7 +10,7 @@ execute typed tools; the companion [RAGs](https://github.com/MasterLKH180cm/RAGs
 service owns document ingestion and retrieval. The local stack works without
 paid model credentials.
 
-Version 0.3 preserves evidence refusals across retrieval, synthesis, loops,
+Version 0.4 adds operator feature controls and a PostgreSQL/pgvector deployment; see the [v0.4 specification](docs/SPEC_V04.md). Version 0.3 preserves evidence refusals across retrieval, synthesis, loops,
 durable results, SSE and MCP, and snapshots the required RAG admission policy.
 It builds on v0.2's immutable definitions, policy snapshots, memory, renewable
 leases, model budgets, a small web UI, authenticated event streams, and optional
@@ -29,6 +29,7 @@ contract, executed checks, and remaining boundaries.
 - [Evidence decisions and refusal](#evidence-decisions-and-refusal)
 - [Parallel steps and approval](#parallel-steps-and-approval)
 - [Models and budgets](#models-and-budgets)
+- [Feature configuration](#feature-configuration)
 - [Deployment configuration](#deployment-configuration)
 - [MCP clients](#mcp-clients)
 - [Validation and limits](#validation-and-limits)
@@ -50,7 +51,7 @@ external service or production topology has been verified.
 | **L7 · Model Gateway** | [Purpose routes, transient fallback, reservations, usage reconciliation, full JSON prompt/output caps](agentic/model.py) | Gateway budgets cover agent planning/synthesis; RAGs and other external costs are separate |
 | **L8 · Tool & Integration** | [Typed tool registry](agentic/tools.py), fixed RAG endpoint, [stdio MCP](agentic/mcp_server.py) | Adaptive loops use read-only tools; arbitrary-code sandbox is explicitly unavailable |
 | **L9 · Knowledge & Memory** | [Tenant/namespace memory](agentic/memory.py), CRUD, TTL and provenance; typed RAG decisions, refused-source quarantine and exact structured zero | Memory search is lexical; vector indexes and calibrated model quality belong to RAGs |
-| **L10 · Persistence** | SQLite; [PostgreSQL adapter](agentic/postgres.py); [local/S3 artifacts](agentic/storage_adapters.py); optional Redis limits | PostgreSQL serializes transactions with an advisory lock; actual service tests do not establish throughput or high availability |
+| **L10 · Persistence** | Default PostgreSQL; explicit SQLite development; [PostgreSQL adapter](agentic/postgres.py); [local/S3 artifacts](agentic/storage_adapters.py); optional Redis limits | PostgreSQL serializes transactions with an advisory lock; actual service tests do not establish throughput or high availability |
 | **L11 · Governance** | Versioned tool/namespace/budget policies, disjoint approvers, provider-secret validation, redacted event metadata | Events are append-only application records, not a tamper-evident audit system |
 | **L12 · Observability & Quality** | [Optional OTLP traces/metrics](agentic/telemetry.py), usage records, durable refusal reasons and terminal REST/SSE/MCP inspection | Protocol tests and synthetic outcomes do not establish general answer quality or paid-provider quality |
 
@@ -76,22 +77,34 @@ flowchart TD
     RAG --> Index[("Knowledge index")]
 ```
 
-The supplied [Compose stack](compose.yaml) runs `api`, `worker`, and `rags` as
-separate containers. SQLite files use the shared `agent-data` volume; RAGs uses
-`rag-data`. [Architecture details](docs/ARCHITECTURE.md) explain recovery,
+The supplied [Compose stack](compose.yaml) runs `postgres`, `api`, `worker` and `rags` as separate containers. RAG and Agent use separate PostgreSQL databases/application roles; named application volumes retain artifacts, caches and any legacy SQLite files. [Architecture details](docs/ARCHITECTURE.md) explain recovery,
 authorization, budgets, and optional infrastructure.
 
 ## Quick start
 
-Requires Git and Docker with the Compose plugin. Clone the repositories as
-siblings; `RAGs` is case-sensitive.
+Requires Git, Python 3.11+ for the credential generator, and Docker Compose with
+`--wait` support. Clone the repositories as siblings; `RAGs` is case-sensitive.
 
 ```bash
 git clone https://github.com/MasterLKH180cm/RAGs.git
 git clone https://github.com/MasterLKH180cm/agentic-system.git
 cd agentic-system
+python scripts/bootstrap_compose.py
 docker compose up -d --build --wait
+set -a
+source data/client.env
+set +a
 ```
+
+The four services are PostgreSQL 17 with pgvector 0.8.7, RAGs, the Agent API and
+an independent worker. Database ports are private; only the HTTP interfaces
+below bind to localhost. The bootstrap generates separate database/admin,
+requester, approver and RAG credentials, writes `.env` and `data/client.env`
+with owner-only permissions, and refuses to overwrite existing files.
+Feature files under `data/config` contain no credentials and are mounted
+read-only. Generated nonsecret config directories/files use `0755`/`0644`, even
+with a restrictive shell umask; existing private directories are preserved and
+require explicit operator adjustment. Both applications use production authentication.
 
 | Service | Local URL |
 | --- | --- |
@@ -100,36 +113,45 @@ docker compose up -d --build --wait
 | RAG API reference | <http://127.0.0.1:8000/docs> |
 | Public process liveness | <http://127.0.0.1:8001/live> and <http://127.0.0.1:8000/live> |
 
-The default stack binds to localhost and uses offline planning, local hashing
-embeddings, and extractive synthesis. Enter `local-agent-key` in the UI to submit
-and inspect runs. Approval uses `local-approver-key`; RAGs uses
-`local-development-key`. These are development credentials.
+Enter the generated `AGENT_API_KEY` from `data/client.env` in the UI. Approval
+requires the separate `AGENT_APPROVER_API_KEY`; RAG requests use `RAGS_API_KEY`.
+Default planning is offline, embeddings use local hashing, and generation is
+extractive. No paid model is configured by the bootstrap.
+
+```bash
+curl --fail-with-body http://127.0.0.1:8001/capabilities \
+  -H "Authorization: Bearer $AGENT_API_KEY"
+curl --fail-with-body http://127.0.0.1:8000/health \
+  -H "Authorization: Bearer $RAGS_API_KEY"
+docker compose logs -f api worker rags
+docker compose down  # Retains named data volumes.
+```
+
+Capabilities must report `storage.backend=postgresql`; RAG health additionally
+reports `storage.vector_search=pgvector_exact`. Each application has its own
+database and non-superuser role. The deployment does not automatically copy
+legacy SQLite state; see [database changes and backups](#database-changes-and-backups).
 
 The dashboard shows field-specific validation messages. If a submission is
 unconfirmed because its response was lost, keep the page open and retry with
 the same goal, execution mode and credential: the pending submission identity
 lets the API return the existing run. Acknowledged success or a changed input
-starts a new logical submission. Reloading the page discards pending identity
-and credentials; inspect existing runs before resubmitting after a reload.
-
-```bash
-docker compose logs -f api worker rags
-docker compose down  # Keep named data volumes.
-```
+starts a new logical submission. Reloading discards pending identity and
+credentials; inspect existing runs before resubmitting after a reload.
 
 ## Run a research workflow
 
-These Bash examples use `curl` and the default local credentials. First index
+These Bash examples use `curl` and the generated credentials loaded from `data/client.env`. First index
 source evidence in RAGs, then submit a workflow:
 
 ```bash
 curl --fail-with-body -sS http://127.0.0.1:8000/documents \
-  -H 'Authorization: Bearer local-development-key' \
+  -H "Authorization: Bearer $RAGS_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{"document_id":"session-policy","title":"Session policy","text":"# Sessions\nSession timeout is 30 minutes after inactivity."}'
 
 curl --fail-with-body -sS http://127.0.0.1:8001/workflows \
-  -H 'Authorization: Bearer local-agent-key' \
+  -H "Authorization: Bearer $AGENT_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{"goal":"What is the session timeout?","idempotency_key":"session-demo-001"}'
 ```
@@ -141,10 +163,10 @@ The offline DAG retrieves evidence and synthesizes an answer with citations in
 ```bash
 RUN_ID=replace-with-returned-id
 curl --fail-with-body -sS "http://127.0.0.1:8001/workflows/$RUN_ID" \
-  -H 'Authorization: Bearer local-agent-key'
+  -H "Authorization: Bearer $AGENT_API_KEY"
 
 curl --fail-with-body -N "http://127.0.0.1:8001/workflows/$RUN_ID/events/stream" \
-  -H 'Authorization: Bearer local-agent-key'
+  -H "Authorization: Bearer $AGENT_API_KEY"
 ```
 
 SSE sends durable event IDs and accepts `Last-Event-ID` or `?after=ID` on
@@ -191,11 +213,11 @@ For a deterministic example, register an immutable arithmetic agent and run it:
 
 ```bash
 curl --fail-with-body -sS http://127.0.0.1:8001/registry/agents \
-  -H 'Authorization: Bearer local-agent-key' -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $AGENT_API_KEY" -H 'Content-Type: application/json' \
   -d '{"name":"calculator","version":1,"allowed_tools":["math.calculate"],"evaluator":"arithmetic"}'
 
 curl --fail-with-body -sS http://127.0.0.1:8001/workflows \
-  -H 'Authorization: Bearer local-agent-key' -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $AGENT_API_KEY" -H 'Content-Type: application/json' \
   -d '{"goal":"Calculate 6 * 7","runtime_mode":"agent_loop","agent_id":"calculator","agent_version":1}'
 ```
 
@@ -211,11 +233,11 @@ Memory is tenant- and namespace-bound; the default namespace is `default`:
 
 ```bash
 curl --fail-with-body -sS http://127.0.0.1:8001/memory/default/session-note \
-  -X PUT -H 'Authorization: Bearer local-agent-key' -H 'Content-Type: application/json' \
+  -X PUT -H "Authorization: Bearer $AGENT_API_KEY" -H 'Content-Type: application/json' \
   -d '{"content":"Session timeout is 30 minutes after inactivity.","ttl_seconds":3600}'
 
 curl --fail-with-body -sS 'http://127.0.0.1:8001/memory/default?q=session&limit=5' \
-  -H 'Authorization: Bearer local-agent-key'
+  -H "Authorization: Bearer $AGENT_API_KEY"
 ```
 
 `GET` and `DELETE /memory/{namespace}/{id}` inspect or remove a record. Optional
@@ -298,7 +320,7 @@ flowchart TD
 
 ```bash
 curl --fail-with-body -sS http://127.0.0.1:8001/workflows \
-  -H 'Authorization: Bearer local-agent-key' -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $AGENT_API_KEY" -H 'Content-Type: application/json' \
   -d '{"goal":"Calculate and publish reviewed results","steps":[
     {"id":"first","tool":"math.calculate","args":{"expression":"7 * 6"}},
     {"id":"second","tool":"math.calculate","args":{"expression":"8 + 9"}},
@@ -313,7 +335,7 @@ Copy the new run ID and inspect the calculations. When `publish` is
 ```bash
 RUN_ID=replace-with-new-run-id
 curl --fail-with-body -sS "http://127.0.0.1:8001/workflows/$RUN_ID/approve/publish" \
-  -H 'Authorization: Bearer local-approver-key' -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $AGENT_APPROVER_API_KEY" -H 'Content-Type: application/json' \
   -d '{"approved":true,"reason":"Reviewed calculation results"}'
 ```
 
@@ -366,11 +388,67 @@ model-assisted retrieval inside RAGs may still incur separate costs. There is
 no aggregate billing cap across both services. The current evaluator is
 deterministic and makes no model-evaluation call.
 
+## Feature configuration
+
+The [v0.4 specification](docs/SPEC_V04.md) defines eighteen permissions.
+`AGENT_FEATURES_FILE` loads a UTF-8 JSON boolean map and
+`AGENT_FEATURES_JSON` overrides individual file entries. Unspecified permissions
+remain `true`; provider/backend/dependency requirements still apply. Unknown
+names, non-booleans, malformed JSON and unreadable selected files fail startup.
+[`agentic/features.py`](agentic/features.py) is the authoritative manifest.
+
+| Flags | Permission |
+| --- | --- |
+| `dag`, `agent_loop` | Validated workflows and bounded adaptive execution |
+| `ui`, `api_docs`, `sse`, `webhooks`, `mcp` | Optional user/protocol interfaces |
+| `registry`, `memory`, `artifacts`, `approvals` | Definition registry, memory access, artifacts and explicit approvals |
+| `rag_search`, `synthesis`, `math`, `merge` | Corresponding typed tools |
+| `model_generation`, `model_fallback` | Configured online calls and additional applicable fallback routes |
+| `telemetry` | Exporter permission; still requires the telemetry extra and explicit exporter configuration |
+
+Edit `data/config/agent.features.json`, for example:
+
+```json
+{"webhooks": false, "agent_loop": false, "model_fallback": false}
+```
+
+To override only the loop restriction, put
+`AGENT_FEATURES_JSON='{"agent_loop":true}'` in `.env`. Recreate API and worker
+together after an environment or feature-file change:
+
+```bash
+docker compose up -d --no-deps --force-recreate --wait api worker
+```
+
+Authenticated `GET /capabilities` returns resolved `features`, enabled
+`modes`/`tools`, redacted `storage` identity and model permissions.
+Disabled UI/docs routes are absent. Other disabled operations return HTTP 403
+with `detail.code=feature_disabled`; UI controls and shipped MCP tool listings
+reflect the permissions. Guards also apply at submission and execution,
+including planned tools and automatic memory access.
+
+New runs snapshot feature constraints. A worker intersects that snapshot with
+its current configuration, so disabling a feature blocks resumed work and later
+enabling it cannot expand an existing run's permissions. Disabled approvals
+never auto-approve a side effect; disabled artifacts initialize no S3 client.
+Configured online generation cannot silently become offline success.
+`model_fallback=false` uses only the first route for the purpose. Authentication,
+tenant/namespace policy, budgets, leases and evidence refusal remain mandatory.
+
+The RAG permission map is separate: `RAGS_FEATURES_FILE` and
+`RAGS_FEATURES_JSON` govern ingestion, retrieval strategies, chunkers, tokenizers,
+models, sidecars and original-image access. See the
+[complete RAG feature/configuration reference](https://github.com/MasterLKH180cm/RAGs#feature-and-operational-configuration).
+The full stack mounts both files and forwards each map only to the relevant service.
+
+
 ## Deployment configuration
 
-### Python processes
+### Explicit SQLite Python processes
 
-Start RAGs using its [quick start](https://github.com/MasterLKH180cm/RAGs#quick-start).
+This is the offline/legacy SQLite path, separate from the default PostgreSQL Compose deployment.
+
+Start RAGs using its [explicit SQLite development instructions](https://github.com/MasterLKH180cm/RAGs#explicit-sqlite-development).
 In this repository, create an environment once:
 
 ```bash
@@ -388,6 +466,8 @@ export AGENT_API_KEY=local-agent-key
 export AGENT_RAG_URL=http://127.0.0.1:8000
 export AGENT_RAG_API_KEY=local-development-key
 export AGENT_DB_PATH="$PWD/data/agentic.db"
+export AGENT_MODEL_PROVIDER=offline
+unset AGENT_DATABASE_URL AGENT_FEATURES_FILE
 ```
 
 Start `uvicorn agentic.api:app --host 127.0.0.1 --port 8001` in one terminal and
@@ -444,11 +524,18 @@ valid Unicode; a rejected replacement preserves the original readable record.
 
 ### Production credential bootstrap
 
+The regular Compose bootstrap already generates production-strength credentials
+for its private PostgreSQL deployment. The alternative below configures separate
+Python processes against operator-managed PostgreSQL. Install each repository's
+`postgres` extra first, pre-create both databases/application roles and the RAG
+`vector` extension, and export their reachable `AGENT_DATABASE_URL` and
+`RAGS_DATABASE_URL`. It does not publish the Compose database port.
+
 For the two-service setup, generate three distinct credentials for one tenant,
 `tenant-a`. Run this once from the `agentic-system` repository with `RAGs` beside
 it. It writes each service's settings to its own ignored `data/production.env`
 with owner-only permissions (`0600`), prints no credentials, and refuses to
-overwrite either file. Existing development `.env` files remain separate.
+overwrite either file. Existing Compose `.env` credentials remain separate.
 
 ```bash
 python - <<'PY'
@@ -462,6 +549,9 @@ agent_root = Path.cwd().resolve()
 rag_root = agent_root.parent / "RAGs"
 if not (agent_root / "agentic").is_dir() or not (rag_root / "rags").is_dir():
     raise SystemExit("Run from agentic-system with the RAGs repository beside it")
+for name in ("AGENT_DATABASE_URL", "RAGS_DATABASE_URL"):
+    if not os.environ.get(name, "").startswith(("postgresql://", "postgres://")):
+        raise SystemExit("Export both application PostgreSQL DSNs before this bootstrap")
 requester, approver, rag_token = [secrets.token_urlsafe(32) for _ in range(3)]
 if len({requester, approver, rag_token}) != 3:
     raise SystemExit("Credential generation collision; run again")
@@ -472,7 +562,7 @@ files = {
         "AGENT_APPROVER_KEYS_JSON": json.dumps({approver: "tenant-a"}),
         "AGENT_RAG_KEYS_JSON": json.dumps({"tenant-a": rag_token}),
         "AGENT_RAG_URL": "http://127.0.0.1:8000",
-        "AGENT_DB_PATH": str(agent_root / "data/production-agentic.db"),
+        "AGENT_DATABASE_URL": os.environ["AGENT_DATABASE_URL"],
         "AGENT_RATE_DB_PATH": str(agent_root / "data/production-limits.db"),
         "AGENT_ARTIFACT_DIR": str(agent_root / "data/production-artifacts"),
         "AGENT_MODEL_PROVIDER": "offline",
@@ -480,12 +570,12 @@ files = {
     rag_root / "data/production.env": {
         "RAGS_ENV": "production",
         "RAGS_KEYS_JSON": json.dumps({rag_token: "tenant-a"}),
-        "RAGS_DB_PATH": str(rag_root / "data/production-rags.db"),
+        "RAGS_DATABASE_URL": os.environ["RAGS_DATABASE_URL"],
         "RAGS_EMBEDDING_PROVIDER": "local",
         "RAGS_MODEL_PROVIDER": "extractive",
     },
 }
-if any(path.exists() for path in files):
+if any(path.exists() or path.is_symlink() for path in files):
     raise SystemExit("Existing production.env kept; reuse it instead of regenerating credentials")
 for path, values in files.items():
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -524,30 +614,167 @@ set +a
 Both Agent processes must load the same configuration, including persistence,
 artifact paths, tenant/RAG mappings, policies, admission controls, and model
 routes/budgets when enabled. Client requests use the generated credential for
-their role; the earlier `local-*` credentials apply only to the development
-setup. These commands exercise production authentication on localhost with
+their role; the earlier `local-*` credentials apply only to the explicit SQLite development path. These commands exercise production authentication on localhost with
 offline models. Public deployment still needs the operational controls below.
 The [polish specification](docs/POLISH_SPEC.md) records the setup contract.
 
 ### Docker configuration
 
-The Compose file is a local development baseline. `cp .env.example .env` lets
-Compose read the basic provider/key switches it explicitly forwards, including
-`RAGS_EMBEDDING_PROVIDER`, `RAGS_MODEL_PROVIDER`, and `AGENT_MODEL_PROVIDER`.
-Apply changes with `docker compose up -d --build --wait`.
+The [.env.example](.env.example) documents every supported Compose setting; use
+`scripts/bootstrap_compose.py` to fill credentials instead of copying empty
+credential fields. API and worker share the same explicit environment mapping.
+RAG receives its dedicated model/feature/processing settings; database-admin
+credentials are not forwarded to applications.
 
-Advanced variables require an explicit Compose override or deployment
-environment; adding them to `.env` alone does not forward them to containers.
-Optional image dependencies can be built with:
+| Variable | Default / bootstrap value | Purpose |
+| --- | --- | --- |
+| `AGENT_ENV` | `production` | Process mode; bootstrap creates separate requester and approver credentials. |
+| `AGENT_API_KEY` | Generated by bootstrap | Generated requester token for client examples; production uses AGENT_KEYS_JSON. |
+| `AGENT_APPROVER_API_KEY` | Generated by bootstrap | Generated approver token for client examples; never reuse requester identity. |
+| `AGENT_KEYS_JSON` | `{}` | Requester-token-to-tenant map. |
+| `AGENT_APPROVER_KEYS_JSON` | `{}` | Disjoint approver-token-to-tenant map. |
+| `AGENT_DATABASE_URL` | Generated by bootstrap | PostgreSQL DSN generated for non-superuser agent_app. |
+| `AGENT_DB_PATH` | `/app/data/agentic.db` | Explicit SQLite development compatibility; Compose requires PostgreSQL DSN. |
+| `AGENT_FEATURES_FILE` | `/app/config/agent.features.json` | JSON boolean overrides shared by API and worker. |
+| `AGENT_FEATURES_JSON` | `{}` | Per-key JSON overrides take precedence over the file. |
+| `AGENT_RAG_URL` | `http://rags:8000` | Fixed knowledge-service URL, shared by API and worker. |
+| `AGENT_RAG_KEYS_JSON` | `{}` | Tenant-to-RAG-token map; reverse direction of RAGS_KEYS_JSON. |
+| `AGENT_RAG_API_KEY` | Unset | Legacy development fallback only. |
+| `AGENT_RAG_TIMEOUT_SECONDS` | `180` | Whole RAG HTTP exchange, finite 1..360 seconds. |
+| `AGENT_RAG_ADMISSION_POLICY` | `compatibility` | calibrated_required also needs a nonempty profile allowlist. |
+| `AGENT_RAG_ADMISSION_PROFILE_IDS_JSON` | `[]` | Allowed reviewed profile IDs, snapshotted with new runs. |
+| `AGENT_MODEL_PROVIDER` | `offline` | offline, openai, anthropic. No paid provider is enabled by default. |
+| `AGENT_MODEL_ROUTES_JSON` | Unset | Optional 1..8 explicit routes with purposes and operator-supplied token prices. |
+| `AGENT_TENANT_POLICIES_JSON` | `{}` | Operator maxima for tools, namespaces, steps, rounds and budgets. |
+| `AGENT_MAX_PARALLEL` | `4` | Active steps per worker, 1..16. |
+| `AGENT_MAX_QUEUED_RUNS` | `100` | Active runs per tenant. |
+| `AGENT_LEASE_SECONDS` | `180` | Durable claim lease. |
+| `AGENT_HEARTBEAT_SECONDS` | `30` | Positive and below one third of the lease. |
+| `AGENT_STEP_TIMEOUT_SECONDS` | `300` | Persisted step deadline. |
+| `AGENT_MAX_ATTEMPTS` | `3` | Includes expired leases. |
+| `AGENT_MAX_MODEL_TOKENS` | `12000` | Per-run model token budget. |
+| `AGENT_MAX_MODEL_OUTPUT_TOKENS` | `1000` | Requested output cap per model call. |
+| `AGENT_RATE_PER_MINUTE` | `600` | Per tenant/subject fixed-minute request bound. |
+| `AGENT_RATE_DB_PATH` | `/app/data/limits.db` | Local shared-volume limiter if Redis is not selected. |
+| `AGENT_REDIS_URL` | Unset | Optional real Redis; requires storage extra. |
+| `AGENT_ARTIFACT_BACKEND` | `local` | local or s3; S3 requires storage extra and bucket. |
+| `AGENT_ARTIFACT_DIR` | `/app/data/artifacts` | Persistent local artifact directory. |
+| `AGENT_S3_BUCKET` | Unset | S3 bucket, used only when s3 is selected. |
+| `AGENT_S3_ENDPOINT` | Unset | Optional S3-compatible endpoint; production requires HTTPS. |
+| `AWS_ACCESS_KEY_ID` | Unset | Optional explicit object-store identity; SDK identity chain is also supported. |
+| `AWS_SECRET_ACCESS_KEY` | Unset | Object-store secret; never commit real values. |
+| `AWS_SESSION_TOKEN` | Unset | Optional temporary-credential session token. |
+| `AWS_DEFAULT_REGION` | `us-east-1` | Object-store region. |
+| `AGENT_OIDC_ISSUER` | Unset | Set issuer, audience and JWKS URL together for verified JWTs. |
+| `AGENT_OIDC_AUDIENCE` | Unset | Expected JWT audience. |
+| `AGENT_OIDC_JWKS_URL` | Unset | Verified signing-key endpoint. |
+| `AGENT_OIDC_ALGORITHMS` | `RS256` | Allowed JWT algorithms. |
+| `AGENT_OIDC_TENANT_CLAIM` | `tenant_id` | Tenant claim name. |
+| `AGENT_OIDC_ROLES_CLAIM` | `roles` | Role claim name. |
+| `AGENT_WEBHOOKS_JSON` | `{}` | Named signed hooks with distinct secrets and tenant bindings. |
+| `AGENT_TELEMETRY_ENABLED` | `0` | Requires telemetry extra, telemetry feature permission and OTLP endpoint. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Unset | OTLP HTTP endpoint. |
+| `OTEL_SERVICE_NAME` | `agentic-system` | Telemetry service name. |
+| `OTEL_TRACES_SAMPLER` | `parentbased_always_on` | Optional OpenTelemetry SDK sampler. |
+| `LOG_LEVEL` | `INFO` | Worker logging level. |
 
-```bash
-docker build --build-arg AGENT_EXTRAS=mcp,postgres,storage,telemetry \
-  -t agentic-system:v0.3 .
+The Agent API/worker also receive `OPENAI_API_KEY`, `OPENAI_API_KEY_FILE`,
+`OPENAI_BASE_URL`, `OPENAI_CHAT_MODEL`, `ANTHROPIC_API_KEY`,
+`ANTHROPIC_API_KEY_FILE`, `ANTHROPIC_BASE_URL` and
+`ANTHROPIC_CHAT_MODEL`. Default endpoints/models remain those shown in
+`.env.example`; API keys are unset. Custom `AGENT_MODEL_ROUTES_JSON` routes can
+select online generation even when the legacy provider selector is `offline`.
+Token prices must be supplied by the operator before using monetary budgets.
+
+RAG supports independent `RAGS_EMBEDDING_BASE_URL/API_KEY/MODEL` and
+`RAGS_GENERATION_BASE_URL/API_KEY/MODEL`, plus matching `*_API_KEY_FILE`.
+These override the selected provider's legacy settings. The full
+[RAG environment table](https://github.com/MasterLKH180cm/RAGs#complete-runtime-environment)
+and this repository's template include tokenizer/chunker JSON, context/output/
+envelope budgets, iterations, federation, model caches, research backends,
+admission profiles and feature files. All named settings are forwarded explicitly.
+
+`POSTGRES_PASSWORD`, `RAGS_DB_PASSWORD` and `AGENT_DB_PASSWORD` are generated
+database bootstrap values. `AGENT_APPROVER_API_KEY` is a client helper, not a
+runtime authorization map. `AGENT_EXTRAS` defaults to `postgres,mcp`;
+`RAGS_EXTRAS` defaults to `postgres,pdf,mcp,vision`. To enable S3/Redis/OTLP or
+trained local encoders, add their extras before selecting the backend:
+
+```dotenv
+AGENT_EXTRAS=postgres,mcp,storage,telemetry
+RAGS_EXTRAS=postgres,pdf,mcp,vision,encoders
 ```
 
-The default image includes `mcp`. Public deployments also need TLS, appropriate
-secret provisioning, backups, and operational monitoring. Keep development
-credentials and real provider secrets out of Git.
+```bash
+docker compose build rags api worker
+docker compose up -d --no-deps --force-recreate --wait rags api worker
+```
+
+Profiles and feature files under `data/config` are available at `/app/config`.
+Secret-file paths must be separately provisioned and readable by container
+UID 10001. Set a secret value or its matching file, not both.
+
+An arbitrary custom `api_key_env` name cannot be inferred from JSON by Compose.
+For a route referring to `SECOND_PROVIDER_KEY`, supply that value privately in
+`.env` and add the explicit mapping to both processes in `compose.providers.yaml`:
+
+```yaml
+services:
+  api:
+    environment:
+      SECOND_PROVIDER_KEY: ${SECOND_PROVIDER_KEY}
+  worker:
+    environment:
+      SECOND_PROVIDER_KEY: ${SECOND_PROVIDER_KEY}
+```
+
+Apply both files with `docker compose -f compose.yaml -f compose.providers.yaml up -d --no-deps --force-recreate api worker`.
+The same rule applies to an independently named secret-file variable. Public
+deployments require their own TLS, identity, secret provisioning and backup
+operations; localhost protocol checks do not establish those properties.
+
+### Database changes and backups
+
+The default stack uses separate `agentic` and `rags` databases on PostgreSQL.
+`agent_app` cannot connect to `rags`, and `rags_app` cannot connect to
+`agentic`. Only bootstrap uses the administrator. The original `agent-data`
+and `rag-data` volumes remain for artifacts, limiter state, caches and preserved
+legacy SQLite files; the new `postgres-data` volume holds deployed database data.
+
+Changing a DSN starts using that store; it does not copy history. Stop API and
+workers before a planned transition and back up both stores. The
+[RAG SQLite importer](https://github.com/MasterLKH180cm/RAGs#database-migration-and-backups)
+transactionally preserves its source/revision/image data in a fresh pgvector
+target. It does not migrate Agent workflow history. Existing Agent SQLite runs
+must remain accessible through their old deployment, or undergo a separately
+reviewed migration; never mix an old SQLite worker with a new PostgreSQL API.
+
+```bash
+docker compose stop api worker rags
+mkdir -p data/backups
+umask 077
+set -C
+docker compose exec -T postgres pg_dump -U postgres -Fc -d agentic \
+  > data/backups/agentic-before-upgrade.dump
+docker compose exec -T postgres pg_dump -U postgres -Fc -d rags \
+  > data/backups/rags-before-upgrade.dump
+set +C
+docker compose up -d --wait
+```
+
+Restore into separately created databases with the intended application owners
+using `pg_restore --exit-on-error`, restrict their connection grants, verify
+health, preserved run/source IDs and representative queries, then switch DSNs.
+Retain the original backup/deployment until recovery is verified. New writes
+are not synchronized back automatically. Application schema upgrades preserve
+existing records; backup/restore is required before an incompatible downgrade.
+
+Existing Docker volumes do not rerun initialization scripts. Changing
+`.env` passwords alone does not rotate stored database roles; rotate credentials
+and application DSNs together. PostgreSQL major upgrades require
+`pg_upgrade` or dump/restore. Updating pgvector requires an explicit administrator
+extension upgrade after compatibility review. `docker compose down -v`
+destroys volumes and belongs only in disposable test cleanup.
 
 ## MCP clients
 
@@ -563,11 +790,11 @@ REST API. MCP exposes no approval tool.
 
 ## Validation and limits
 
-The current local core suite passed **127 unit tests and 173 integration tests**:
+The last recorded v0.3 local core baseline passed **127 unit tests and 173 integration tests**:
 **300 unique cases, no selected skips**. Collection contains 305 cases; the
 five external-service cases are explicitly deselected from the local core gate.
 All **21 production Python modules** are included in coverage: **88.21% of
-statements and 81.17% of branches**, with zero exclusions. The fixed minimums
+statements and 81.17% of branches**, with zero exclusions. These figures are historical and are not the v0.4 coverage result. The fixed minimums
 are **85% line coverage and 75% branch coverage**, checked separately.
 See the committed [test specification](docs/TEST_SPEC.md),
 [request/dashboard polish specification](docs/POLISH_SPEC.md),
@@ -632,7 +859,7 @@ evidence; their execution is not added to this Python coverage percentage.
 
 ### Run real end-to-end gates
 
-The existing v0.2 and v0.3 HTTP/worker/MCP scripts passed again locally. The new
+The v0.3 baseline v0.2/v0.3 HTTP/worker/MCP scripts passed locally; v0.4 additionally requires their exact-revision PostgreSQL/pgvector CI execution. The new
 resilience harness passed **all six checks** with SQLite: actual worker loss
 and lease recovery, in-flight cancellation fencing, SSE cursor reconnect,
 transient retry, retry exhaustion and a persisted step deadline. It starts real
@@ -663,7 +890,7 @@ checks and supply its own report/screenshots. Local handler probes used real
 APIs/workers with a Node DOM fixture; they are not Chromium execution. The
 earlier local browser attempt remains recorded as **failed, 0/8**, because this
 workspace prohibits the required UNIX sockets. Inspect the
-[PR checks](https://github.com/MasterLKH180cm/agentic-system/pull/5/checks) for the
+[PR checks](https://github.com/MasterLKH180cm/agentic-system/pull/6/checks) for the
 current remote outcome.
 
 For the five actual PostgreSQL/Redis/S3 cases, install `.[postgres,storage]`,
@@ -681,8 +908,23 @@ AGENT_E2E_POSTGRES_URL="${AGENT_E2E_POSTGRES_URL:?Set the disposable recovery da
   python tests/e2e_resilience.py --report reports/testing/resilience-postgres.json
 ```
 
-CI provisions separate PostgreSQL databases for v0.2, v0.3 and resilience,
-retains all three Compose containers, and retains actual RAPTOR/LightRAG and
+For a fresh disposable pair with pgvector already enabled, export both
+`AGENT_E2E_POSTGRES_URL` and `RAGS_E2E_POSTGRES_URL`, then run:
+
+```bash
+python -m pip install -e ".[dev,mcp,postgres,telemetry,e2e]" -e "../RAGs[mcp,postgres]"
+python tests/e2e_postgres_v04.py --report reports/testing/pgvector-http-v04.json
+python tests/e2e_browser.py --report reports/testing/browser-postgres.json \
+  --artifacts reports/testing/browser-postgres-artifacts
+```
+
+The strict v0.4 gate checks native vector columns, tenant/filter/revision scope,
+restart persistence, real worker/MCP execution, disabled mutation/query/tool
+controls and historical purge. Missing database URLs or unavailable PostgreSQL
+fail the selected gate. Each harness needs its own fresh database pair; CI
+creates them explicitly and reports actual backend identity.
+
+CI provisions separate RAG/Agent PostgreSQL databases for v0.2, v0.3, resilience and v0.4 feature/lifecycle checks; Chromium also uses both PostgreSQL stores. It tests all four Compose services, and retains actual RAPTOR/LightRAG and
 frozen-profile admission chains. Review the exact PR revision's checks and artifacts for the remote outcome.
 Earlier execution records are retained in the
 [v0.3 ledger](docs/IMPLEMENTATION_REVIEW_V03.md); they do not replace current

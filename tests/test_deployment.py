@@ -1,6 +1,7 @@
 """Deployment bootstrap contracts; all credentials stay in disposable files."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shlex
 import stat
@@ -29,9 +30,15 @@ def settings(path):
     return values
 
 
-def test_generated_credentials_are_private_distinct_and_tenant_aligned(tmp_path):
+@pytest.mark.parametrize("creation_umask", [0o022, 0o077])
+def test_generated_credentials_are_private_distinct_and_tenant_aligned(tmp_path, creation_umask):
     module = bootstrap()
-    module.create(tmp_path)
+    previous_umask = os.umask(creation_umask)
+    try:
+        module.create(tmp_path)
+    finally:
+        os.umask(previous_umask)
+    assert stat.S_IMODE((tmp_path / "data/config").stat().st_mode) == 0o755
     env, clients = settings(tmp_path / ".env"), settings(tmp_path / "data/client.env")
     assert stat.S_IMODE((tmp_path / ".env").stat().st_mode) == 0o600
     assert stat.S_IMODE((tmp_path / "data/client.env").stat().st_mode) == 0o600
@@ -82,3 +89,15 @@ def test_failed_bootstrap_removes_only_new_files(tmp_path, monkeypatch):
         module.create(tmp_path)
     assert not (tmp_path / ".env").exists()
     assert not (tmp_path / "data/client.env").exists()
+
+
+def test_existing_private_config_directory_is_not_widened(tmp_path):
+    config = tmp_path / "data/config"
+    config.mkdir(parents=True)
+    config.chmod(0o700)
+    with pytest.raises(PermissionError, match="permissions were not changed"):
+        bootstrap().create(tmp_path)
+    assert stat.S_IMODE(config.stat().st_mode) == 0o700
+    assert not (tmp_path / ".env").exists()
+    assert not (tmp_path / "data/client.env").exists()
+    assert not list(config.iterdir())

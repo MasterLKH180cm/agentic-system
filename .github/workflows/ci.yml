@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 135433e32f08a4bf089ac6daabed13f2dd84eb74 # exact companion v0.4 implementation commit
+          ref: f3c9506b850c0196517861b11cf51ca56d6ed991 # exact companion v0.4 implementation commit
           path: external/RAGs
       - uses: actions/setup-python@v5
         with:
@@ -142,14 +142,16 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 135433e32f08a4bf089ac6daabed13f2dd84eb74 # companion v0.4
+          ref: f3c9506b850c0196517861b11cf51ca56d6ed991 # companion v0.4
           path: external/RAGs
       - name: Put the sibling RAGs build context in place
         run: |
           mkdir -p ../RAGs
           cp -a external/RAGs/. ../RAGs/
       - name: Generate private distinct deployment credentials
-        run: python scripts/bootstrap_compose.py
+        run: |
+          umask 077
+          python scripts/bootstrap_compose.py
       - name: Verify complete configuration and model/feature wiring
         run: python scripts/check_compose.py --report reports/testing/compose-config.json
       - name: Build and run PostgreSQL, RAG, API and worker
@@ -208,7 +210,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 135433e32f08a4bf089ac6daabed13f2dd84eb74 # companion v0.4
+          ref: f3c9506b850c0196517861b11cf51ca56d6ed991 # companion v0.4
           path: external/RAGs
       - uses: actions/setup-python@v5
         with:
@@ -326,7 +328,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 135433e32f08a4bf089ac6daabed13f2dd84eb74 # companion v0.4
+          ref: f3c9506b850c0196517861b11cf51ca56d6ed991 # companion v0.4
           path: external/RAGs
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -378,7 +380,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 135433e32f08a4bf089ac6daabed13f2dd84eb74 # companion v0.4
+          ref: f3c9506b850c0196517861b11cf51ca56d6ed991 # companion v0.4
           path: external/RAGs
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -473,7 +475,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 135433e32f08a4bf089ac6daabed13f2dd84eb74 # exact companion implementation
+          ref: f3c9506b850c0196517861b11cf51ca56d6ed991 # exact companion implementation
           path: external/RAGs
           persist-credentials: false
       - uses: actions/setup-python@v5

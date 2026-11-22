@@ -59,6 +59,19 @@ def create(directory: Path) -> list[Path]:
         targets.append((directory / "data/config/agent.features.json", "{}\n", 0o644))
     if any(path.exists() or path.is_symlink() for path, _body, _mode in targets):
         raise FileExistsError("Existing configuration kept; reuse it or choose a new directory")
+    config_dir = directory / "data/config"
+    try:
+        config_dir.mkdir(parents=True)
+    except FileExistsError:
+        if not config_dir.is_dir() or config_dir.stat().st_mode & 0o005 != 0o005:
+            raise PermissionError(
+                "Existing data/config must permit container reads and directory traversal; "
+                "its permissions were not changed"
+            ) from None
+    else:
+        # mkdir/open creation modes are filtered by the caller's umask.
+        # Widen only this newly created nonsecret directory, never existing paths.
+        config_dir.chmod(0o755)
     created = []
     try:
         for path, body, mode in targets:
@@ -66,6 +79,7 @@ def create(directory: Path) -> list[Path]:
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
             created.append(path)
             with os.fdopen(fd, "w", encoding="utf-8") as output:
+                os.fchmod(output.fileno(), mode)
                 output.write(body)
     except BaseException:
         for path in reversed(created):
