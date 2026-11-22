@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from agentic.auth import Authenticator
 from agentic.config import Settings
 from agentic.control import ControlPlane
+from agentic.features import FeatureDisabled
 from agentic.interfaces import install_interfaces
 from agentic.limits import BodyLimitMiddleware
 from agentic.memory import Memory
@@ -25,7 +26,14 @@ MemoryName = Annotated[str, Path(pattern=NAME_PATTERN)]
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     config = settings or Settings.from_env()
-    app = FastAPI(title="Agentic Workflow System", version="0.3.0")
+    docs = config.features.enabled("api_docs")
+    app = FastAPI(title="Agentic Workflow System", version="0.4.0",
+                  docs_url="/docs" if docs else None, redoc_url="/redoc" if docs else None,
+                  openapi_url="/openapi.json" if docs else None)
+
+    @app.exception_handler(FeatureDisabled)
+    async def disabled_feature(request: Request, exc: FeatureDisabled):
+        return JSONResponse(status_code=403, content={"detail": exc.detail()})
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_error(request: Request, exc: RequestValidationError):
@@ -44,16 +52,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     model = ModelGateway(config, store)
     tools = Tools(config, model, store)
     control = ControlPlane(store, config)
-    memory = Memory(store)
+    memory = Memory(store, config.features)
     app.state.store = store
     app.state.authenticator = auth
     app.state.control = control
     app.state.model = model
     app.state.tools = tools
-    install_telemetry(app)
+    install_telemetry(app, allowed=config.features.enabled("telemetry"))
 
     async def submit_workflow(payload: WorkflowIn, tenant: str, *, principal=None) -> dict:
         try:
+            control.validate_submission_features(payload)
             duplicate = await asyncio.to_thread(store.duplicate, tenant, payload)
             if duplicate:
                 if principal is not None:
@@ -74,13 +83,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if "memory:read" not in principal.scopes:
                     specification["allowed_tools"] = [t for t in specification["allowed_tools"] if t != "memory.search"]
                 if payload.steps or payload.workflow_id:
-                    control.validate_steps(compiled.steps, specification)
+                    control.validate_steps(compiled.steps, specification, features=config.features,
+                                           online=config.provider != "offline")
             return await asyncio.to_thread(
                 store.submit, tenant, compiled, specification=specification,
                 request_hash=store.fingerprint(payload), max_queued_runs=config.max_queued_runs,
             )
         except QueueFull as exc:
             raise HTTPException(429, "Tenant workflow queue is full") from exc
+        except FeatureDisabled:
+            raise
         except PermissionError as exc:
             raise HTTPException(403, str(exc)) from exc
         except LookupError as exc:
@@ -108,9 +120,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def health(tenant: str = Depends(auth.tenant_dependency("workflow:read"))) -> dict:
         return {"status": "ok", "tenant": tenant}
 
+    @app.get("/capabilities")
+    def capabilities(tenant: str = Depends(auth.tenant_dependency("workflow:read"))) -> dict:
+        return {"features": config.features.effective(),
+                "modes": {name: config.features.enabled(name) for name in ("dag", "agent_loop")},
+                "tools": tools.describe(),
+                "storage": {"backend": "postgresql" if config.db_path.startswith(("postgresql://", "postgres://"))
+                            else "sqlite", "memory_search": "lexical"},
+                "model": {"provider": config.provider,
+                          "generation_enabled": config.provider != "offline" and config.features.enabled("model_generation"),
+                          "fallback_enabled": config.features.enabled("model_fallback")}}
+
     @app.get("/tools")
     def available_tools(tenant: str = Depends(auth.tenant_dependency("workflow:read"))) -> dict:
-        return {"tenant": tenant, "allowlisted": [t["name"] for t in tools.describe()],
+        return {"tenant": tenant, "allowlisted": [t["name"] for t in tools.describe() if t["enabled"]],
                 "approval_required": ["artifact.publish"], "definitions": tools.describe(),
                 "sandbox": {"available": False, "reason": "No arbitrary-code execution adapter configured"}}
 
@@ -155,6 +178,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         tenant: str = Depends(auth.tenant_dependency("workflow:approve")),
     ) -> dict:
         run = authorized_run(request, tenant, run_id, "workflow:approve", missing=409)
+        specification = run["specification"]
+        snapshot = specification.get("feature_flags")
+        config.features.require("approvals", snapshot)
+        config.features.require(specification.get("runtime_mode", "dag"), snapshot)
+        step = next((item for item in run["steps"] if item["id"] == step_id), None)
+        if step is not None:
+            config.features.require_tool(step["tool"], snapshot=snapshot, online=config.provider != "offline",
+                                         approval_required=bool(step["approval_required"]))
         approver = auth.authenticate(request.headers.get("authorization"))
         if run["specification"].get("requester_subject") == approver.subject:
             raise HTTPException(403, "The workflow requester cannot approve their own workflow")
@@ -175,6 +206,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return control.register(tenant, kind, payload)
         except ValidationError as exc:
             raise HTTPException(422, "Invalid definition") from exc
+        except FeatureDisabled:
+            raise
         except PermissionError as exc:
             raise HTTPException(403, str(exc)) from exc
         except LookupError as exc:
@@ -184,6 +217,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/registry/{kind}")
     def definitions(kind: str, tenant: str = Depends(auth.tenant_dependency("registry:read"))) -> list[dict]:
+        config.features.require("registry")
         if kind not in REGISTRY_MODELS:
             raise HTTPException(404, "Unknown definition kind")
         return store.definitions(tenant, kind)
@@ -193,12 +227,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         kind: str, name: str, version: int,
         tenant: str = Depends(auth.tenant_dependency("registry:read")),
     ) -> dict:
+        config.features.require("registry")
         item = store.definition(tenant, kind, name, version)
         if item is None:
             raise HTTPException(404, "Definition not found")
         return item
 
     def namespace_allowed(tenant: str, namespace: str) -> None:
+        config.features.require("memory")
         if namespace not in control.server_policy(tenant).allowed_namespaces:
             raise HTTPException(403, "Memory namespace denied by server policy")
 
@@ -253,6 +289,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/artifacts/{artifact_id}")
     def artifact(artifact_id: str, request: Request, tenant: str = Depends(auth.tenant_dependency("workflow:read"))) -> dict:
+        config.features.require("artifacts")
         namespaces = store.artifact_namespaces(tenant, artifact_id)
         if not namespaces:
             raise HTTPException(404, "Artifact not found")
@@ -275,7 +312,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(404, "Artifact not found")
         return item
 
-    install_interfaces(app, store, submit_workflow, auth)
+    install_interfaces(app, store, submit_workflow, auth, config)
     app.add_middleware(BodyLimitMiddleware, max_body_bytes=512_000)
     return app
 

@@ -51,10 +51,15 @@ class ModelGateway:
     def input_capacity(self, system: str, *, tenant: str, run_id: str | None) -> int:
         if self.config.provider == "offline":
             return 14000
+        self.config.features.require("model_generation", self._snapshot(tenant, run_id))
         remaining = self.store.remaining_model_tokens(tenant, run_id, self.config.max_model_tokens)
         return max(0, min(14000, remaining - self.config.max_model_output_tokens - self.input_units(system, "")))
 
-    def routes(self, purpose: str) -> list[ModelRoute]:
+    def _snapshot(self, tenant: str, run_id: str | None) -> dict | None:
+        run = self.store.get(tenant, run_id) if run_id is not None else None
+        return run["specification"].get("feature_flags") if run is not None else None
+
+    def routes(self, purpose: str, snapshot: dict | None = None) -> list[ModelRoute]:
         routes = list(self.config.routes)
         if not routes and self.config.provider in {"openai", "anthropic"}:
             is_openai = self.config.provider == "openai"
@@ -67,12 +72,12 @@ class ModelGateway:
         result = [route for route in routes if purpose in route.purposes]
         if not result:
             raise ValueError("No model route configured for this purpose")
-        return result
+        return result if self.config.features.enabled("model_fallback", snapshot) else result[:1]
 
     @staticmethod
-    async def _request(client, route, system, message, output_limit, run_id):
+    async def _request(client, route, system, message, output_limit, run_id, telemetry_allowed):
         with span("model.request", {"run.id": run_id or "unbound", "model.route": route.name,
-                                    "model.provider": route.provider}):
+                                    "model.provider": route.provider}, allowed=telemetry_allowed):
             if route.provider == "openai":
                 path = "/chat/completions"
                 headers = {"Authorization": "Bearer " + route.api_key}
@@ -102,13 +107,15 @@ class ModelGateway:
     ) -> str | None:
         if self.config.provider == "offline":
             return None
+        snapshot = self._snapshot(tenant, run_id)
+        self.config.features.require("model_generation", snapshot)
         if len(system) + len(message) > 100000:
             raise ValueError("Model input exceeds size limit")
         # UTF-8 bytes plus message overhead intentionally over-reserves compared
         # with typical text tokenizers. Reported usage replaces it when available.
         estimated_input = self.input_units(system, message)
         output_limit = self.config.max_model_output_tokens
-        routes = self.routes(purpose)
+        routes = self.routes(purpose, snapshot)
         async with httpx.AsyncClient(timeout=90, follow_redirects=False) as client:
             for index, route in enumerate(routes):
                 if not route.api_key:
@@ -119,7 +126,8 @@ class ModelGateway:
                     default_limit=self.config.max_model_tokens,
                 )
                 try:
-                    response = await self._request(client, route, system, message, output_limit, run_id)
+                    response = await self._request(client, route, system, message, output_limit, run_id,
+                                                   self.config.features.enabled("telemetry", snapshot))
                     response.raise_for_status()
                     if len(response.content) > 1_000_000:
                         raise ValueError("Model response exceeds size limit")

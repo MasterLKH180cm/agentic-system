@@ -79,8 +79,8 @@ class Tools:
         self.config = config
         self.model = model
         self.store = store or model.store
-        self.memory = Memory(self.store)
-        self.artifacts = ArtifactStore()
+        self.memory = Memory(self.store, config.features)
+        self.artifacts = ArtifactStore(config.features) if config.features.enabled("artifacts") else None
         self.registry = {}
         for tool in (
             RegisteredTool("rag.search", self._search),
@@ -104,11 +104,19 @@ class Tools:
     def describe(self) -> list[dict]:
         return [
             {"name": name, "read_only": tool.read_only, "approval_required": tool.approval_required,
+             "enabled": self.config.features.tool_enabled(name, online=self.config.provider != "offline"),
              "arguments": ARGUMENT_MODELS[name].model_json_schema()}
             for name, tool in self.registry.items() if not tool.internal
         ]
 
     async def execute(self, job: dict, inputs: dict[str, Any]) -> dict:
+        specification = job.get("specification", {})
+        snapshot = specification.get("feature_flags")
+        self.config.features.require(specification.get("runtime_mode", "dag"), snapshot)
+        if specification.get("definitions"):
+            self.config.features.require("registry", snapshot)
+        self.config.features.require_tool(job["tool"], snapshot=snapshot, online=self.config.provider != "offline",
+                                          approval_required=bool(job.get("approval_required")))
         if len(json.dumps(inputs)) > 100000:
             raise ValueError("Tool inputs exceed size limit")
         name = job["tool"]
@@ -116,7 +124,6 @@ class Tools:
         if tool is None:
             raise ValueError("Tool is not registered")
         args = ARGUMENT_MODELS[name].model_validate(job.get("args", {})).model_dump()
-        specification = job.get("specification", {})
         if name != "workflow.plan" and name not in specification.get("allowed_tools", ALL_TOOLS):
             raise PermissionError("Tool is not allowed by the snapshotted policy")
         if job.get("in_agent_loop") and (not tool.read_only or tool.internal):
@@ -283,5 +290,6 @@ class Tools:
             return {"planned_steps": job["checkpoint"]["step_ids"]}
         steps = await plan(job["goal"], self.model, specification=job.get("specification", {}),
                            tenant=job["tenant"], run_id=job["run_id"])
-        ControlPlane.validate_steps([Step.model_validate(s.model_dump()) for s in steps], job.get("specification", {}))
+        ControlPlane.validate_steps([Step.model_validate(s.model_dump()) for s in steps], job.get("specification", {}),
+                                    features=self.config.features, online=self.config.provider != "offline")
         return {"planned_steps": self.store.expand_plan(job, steps)}

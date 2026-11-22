@@ -57,6 +57,8 @@ def main():
         # Optional CI database must be disposable; the rest of the flow is unchanged.
         if os.getenv("AGENT_E2E_POSTGRES_URL"):
             env["AGENT_DATABASE_URL"] = os.environ["AGENT_E2E_POSTGRES_URL"]
+        if os.getenv("RAGS_E2E_POSTGRES_URL"):
+            env["RAGS_DATABASE_URL"] = os.environ["RAGS_E2E_POSTGRES_URL"]
         commands = [
             ("rag", [sys.executable, "-m", "uvicorn", "rags.api:app", "--host", "127.0.0.1", "--port", str(rag_port)]),
             ("api", [sys.executable, "-m", "uvicorn", "agentic.api:app", "--host", "127.0.0.1", "--port", str(agent_port)]),
@@ -100,6 +102,12 @@ def main():
                     time.sleep(.1)
                 raise AssertionError(("Workflow deadline", state))
 
+            storage = {"rag": rag("GET", "/health")["storage"],
+                       "agent": agent("GET", "/capabilities")["storage"]}
+            assert storage["rag"]["backend"] == ("postgresql" if env.get("RAGS_DATABASE_URL") else "sqlite")
+            assert storage["agent"]["backend"] == ("postgresql" if env.get("AGENT_DATABASE_URL") else "sqlite")
+            if env.get("RAGS_DATABASE_URL"):
+                assert storage["rag"]["vector_search"] == "pgvector_exact"
             text = "# Session policy\nSession timeout is 30 minutes after inactivity. Refresh tokens rotate after login.\n" * 8
             doc = rag("POST", "/documents", expected=201, json={
                 "document_id": "session", "title": "Session policy", "text": text,
@@ -211,7 +219,8 @@ def main():
             checks.append("Real signed webhook, malformed-header rejection without execution and replay prevention")
             subprocess.run([sys.executable, str(ROOT / "tests" / "smoke_mcp.py")], env=env, cwd=ROOT, check=True, timeout=45)
             checks.append("Both real stdio MCP handshakes and HTTP-backed tool calls")
-            print(json.dumps({"status": "passed", "checks": checks, "live_paid_provider": False}, indent=2))
+            print(json.dumps({"status": "passed", "checks": checks, "storage": storage,
+                              "live_paid_provider": False}, indent=2))
         except BaseException:
             for name, process, logfile in processes:
                 logfile.flush()

@@ -180,6 +180,8 @@ class Authenticator:
             principal = self.authenticate(authorization)
             resource = {"namespace": request.path_params["namespace"]} if "namespace" in request.path_params else {}
             self.require(principal, action, resource)
+            if request.headers.get("x-agent-interface") == "mcp":
+                self.config.features.require("mcp")
             if not self.limiter.take(principal.tenant + ":" + principal.subject):
                 raise HTTPException(429, "Request rate exceeded", headers={"Retry-After": "60"})
             return principal.tenant

@@ -6,6 +6,7 @@ with --browser-executable. Missing browsers are failures, never skipped checks.
 import argparse
 from contextlib import ExitStack, suppress
 import json
+import os
 from pathlib import Path
 import re
 import time
@@ -474,14 +475,17 @@ def main():
     started = time.perf_counter()
     artifacts = Path(args.artifacts)
     artifacts.mkdir(parents=True, exist_ok=True)
-    services = Services(step_timeout=45)
+    services = Services(step_timeout=45, postgres=os.getenv("AGENT_E2E_POSTGRES_URL"),
+                        rag_postgres=os.getenv("RAGS_E2E_POSTGRES_URL"))
     browser = None
     report = {"schema_version": "agent-browser-e2e-v1", "status": "failed", "expected_checks": EXPECTED,
-              "checks": [], "backend": "sqlite", "real_services": ["rag-http", "agent-http", "independent-worker", "chromium"],
+              "checks": [], "backend": "postgresql" if services.postgres else "sqlite",
+              "real_services": ["rag-http", "agent-http", "independent-worker", "chromium"],
               "live_paid_provider": False, "page_errors": [], "screenshots": []}
     try:
         from playwright.sync_api import sync_playwright
         with services, sync_playwright() as playwright, ExitStack() as cleanup:
+            report["storage"] = {"rag": services.rag_storage, "agent": services.agent_storage}
             browser = playwright.chromium.launch(headless=True, executable_path=args.browser_executable,
                                                   env=clean_environment())
             cleanup.callback(browser.close)

@@ -84,6 +84,9 @@ def main():
         raise ValueError("External RAG verification requires its authorized fixture document IDs")
     profile_file = os.getenv("AGENT_E2E_ADMISSION_PROFILE")
     postgres = os.getenv("AGENT_E2E_POSTGRES_URL")
+    rag_postgres = os.getenv("RAGS_E2E_POSTGRES_URL")
+    if external and rag_postgres:
+        raise ValueError("An externally managed RAG URL cannot also select a local RAG database")
     processes, checks = [], []
     with tempfile.TemporaryDirectory(prefix="agent-v03-e2e-") as directory, ExitStack() as stack:
         agent_url = f"http://127.0.0.1:{free_port()}"
@@ -107,6 +110,8 @@ def main():
         })
         if postgres:
             env["AGENT_DATABASE_URL"] = postgres
+        if rag_postgres:
+            env["RAGS_DATABASE_URL"] = rag_postgres
         if profile_file:
             profile = json.loads(Path(profile_file).read_text())
             env.update({"RAGS_ADMISSION_POLICY": "calibrated_required", "RAGS_ADMISSION_PROFILE": profile_file,
@@ -236,7 +241,14 @@ def main():
                 exact_zero = finish(submit("Calculate 2 - 2"))
                 assert exact_zero["status"] == "completed" and exact_zero["steps"][0]["result"]["value"] == 0
                 checks.append("Actual refused+accepted branch merge, authorized structured zero and arithmetic zero")
-            print(json.dumps({"status": "passed", "checks": checks, "live_paid_provider": False,
+            storage = {"rag": request("GET", rag_url, "/health")["storage"],
+                       "agent": request("GET", agent_url, "/capabilities")["storage"]}
+            assert storage["agent"]["backend"] == ("postgresql" if postgres else "sqlite")
+            if not external:
+                assert storage["rag"]["backend"] == ("postgresql" if rag_postgres else "sqlite")
+            if rag_postgres:
+                assert storage["rag"]["vector_search"] == "pgvector_exact"
+            print(json.dumps({"status": "passed", "checks": checks, "storage": storage, "live_paid_provider": False,
                               "required_admission": bool(profile_file), "external_research_rag": bool(external)}, indent=2))
         except BaseException:
             for name, process, log in processes:

@@ -31,7 +31,7 @@
   function releaseAction(id, owner) {
     if (actions.get(id) === owner) {
       actions.delete(id);
-      byId(id).disabled = false;
+      byId(id).disabled = byId(id).dataset.featureDisabled === 'true';
     }
   }
 
@@ -65,6 +65,7 @@
   function errorMessage(result, status) {
     const fallback = 'Request failed (HTTP ' + status + '). Check the request and try again.';
     if (typeof result?.detail === 'string' && result.detail.trim()) return result.detail.trim().slice(0, 600);
+    if (result?.detail?.code === 'feature_disabled') return 'This capability is disabled by the operator.';
     if (!Array.isArray(result?.detail)) return fallback;
     const messages = result.detail.slice(0, 3).flatMap(item => {
       if (typeof item?.msg !== 'string' || !item.msg.trim()) return [];
@@ -140,6 +141,7 @@
   }
 
   function action(id, handler) {
+    if (byId(id).dataset.featureDisabled === 'true') return;
     byId(id).addEventListener('click', async () => {
       const owner = context();
       actions.set(id, owner);

@@ -4,14 +4,18 @@ from functools import lru_cache
 import os
 import time
 
+from agentic.features import Features
+
 
 SAFE_ATTRIBUTES = {"run.id", "step.id", "tool.name", "model.route", "model.provider",
                    "http.method", "http.route", "http.status_code", "outcome", "token.count"}
 
 
 class Telemetry:
-    def __init__(self):
-        self.enabled = os.getenv("AGENT_TELEMETRY_ENABLED", "0") == "1"
+    def __init__(self, allowed: bool | None = None):
+        if allowed is None:
+            allowed = Features.from_env().enabled("telemetry")
+        self.enabled = allowed and os.getenv("AGENT_TELEMETRY_ENABLED", "0") == "1"
         self.provider = None
         if not self.enabled:
             return
@@ -80,17 +84,17 @@ class Telemetry:
             self.meter_provider.shutdown()
 
 
-@lru_cache(maxsize=1)
-def get_telemetry() -> Telemetry:
-    return Telemetry()
+@lru_cache(maxsize=3)
+def get_telemetry(allowed: bool | None = None) -> Telemetry:
+    return Telemetry(allowed)
 
 
-def span(name: str, attributes: dict | None = None):
-    return get_telemetry().span(name, attributes)
+def span(name: str, attributes: dict | None = None, *, allowed: bool | None = None):
+    return get_telemetry(allowed).span(name, attributes)
 
 
-def install_telemetry(app):
-    telemetry = get_telemetry()
+def install_telemetry(app, *, allowed: bool | None = None):
+    telemetry = get_telemetry(allowed)
     app.state.telemetry = telemetry
 
     @app.middleware("http")

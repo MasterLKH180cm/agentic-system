@@ -3,7 +3,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 AGENT_ENV=production
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY agentic ./agentic
-ARG AGENT_EXTRAS=mcp
+ARG AGENT_EXTRAS=postgres,mcp
 RUN pip install --no-cache-dir ".[${AGENT_EXTRAS}]" \
     && useradd --uid 10001 --create-home appuser \
     && mkdir -p /app/data && chown appuser:appuser /app/data

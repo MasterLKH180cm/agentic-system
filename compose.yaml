@@ -1,68 +1,189 @@
-# Local-only example. Clone RAGs and agentic-system as sibling folders.
-# The fixed DEMO keys below MUST NOT be used on publicly exposed systems.
+# PostgreSQL deployment. Generate private .env/config files with scripts/bootstrap_compose.py.
+# PostgreSQL is private to this stack; only localhost HTTP ports are published.
+# Clone RAGs and agentic-system as sibling folders.
 x-agent-env: &agent-env
-  AGENT_ENV: development
-  AGENT_API_KEY: ${AGENT_API_KEY:-local-agent-key}
-  AGENT_DB_PATH: /app/data/agentic.db
-  AGENT_RAG_URL: http://rags:8000
-  AGENT_RAG_API_KEY: ${RAGS_API_KEY:-local-development-key}
-  AGENT_MODEL_PROVIDER: ${AGENT_MODEL_PROVIDER:-offline}
-  AGENT_MAX_PARALLEL: ${AGENT_MAX_PARALLEL:-4}
-  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-  OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
-  OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4.1-mini}
-  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-  ANTHROPIC_CHAT_MODEL: ${ANTHROPIC_CHAT_MODEL:-claude-sonnet-4-5}
+  AGENT_ENV: "${AGENT_ENV:-production}"
+  AGENT_API_KEY: "${AGENT_API_KEY}"
+  AGENT_KEYS_JSON: "${AGENT_KEYS_JSON:?Run python scripts/bootstrap_compose.py first}"
+  AGENT_APPROVER_KEYS_JSON: "${AGENT_APPROVER_KEYS_JSON:?Run python scripts/bootstrap_compose.py first}"
+  AGENT_DATABASE_URL: "${AGENT_DATABASE_URL:?Run python scripts/bootstrap_compose.py first}"
+  AGENT_DB_PATH: "${AGENT_DB_PATH:-/app/data/agentic.db}"
+  AGENT_FEATURES_FILE: "${AGENT_FEATURES_FILE:-/app/config/agent.features.json}"
+  AGENT_FEATURES_JSON: "${AGENT_FEATURES_JSON}"
+  AGENT_RAG_URL: "${AGENT_RAG_URL:-http://rags:8000}"
+  AGENT_RAG_KEYS_JSON: "${AGENT_RAG_KEYS_JSON:?Run python scripts/bootstrap_compose.py first}"
+  AGENT_RAG_API_KEY: "${AGENT_RAG_API_KEY}"
+  AGENT_RAG_TIMEOUT_SECONDS: "${AGENT_RAG_TIMEOUT_SECONDS:-180}"
+  AGENT_RAG_ADMISSION_POLICY: "${AGENT_RAG_ADMISSION_POLICY:-compatibility}"
+  AGENT_RAG_ADMISSION_PROFILE_IDS_JSON: "${AGENT_RAG_ADMISSION_PROFILE_IDS_JSON}"
+  AGENT_MODEL_PROVIDER: "${AGENT_MODEL_PROVIDER:-offline}"
+  AGENT_MODEL_ROUTES_JSON: "${AGENT_MODEL_ROUTES_JSON}"
+  AGENT_TENANT_POLICIES_JSON: "${AGENT_TENANT_POLICIES_JSON}"
+  AGENT_MAX_PARALLEL: "${AGENT_MAX_PARALLEL:-4}"
+  AGENT_MAX_QUEUED_RUNS: "${AGENT_MAX_QUEUED_RUNS:-100}"
+  AGENT_LEASE_SECONDS: "${AGENT_LEASE_SECONDS:-180}"
+  AGENT_HEARTBEAT_SECONDS: "${AGENT_HEARTBEAT_SECONDS:-30}"
+  AGENT_STEP_TIMEOUT_SECONDS: "${AGENT_STEP_TIMEOUT_SECONDS:-300}"
+  AGENT_MAX_ATTEMPTS: "${AGENT_MAX_ATTEMPTS:-3}"
+  AGENT_MAX_MODEL_TOKENS: "${AGENT_MAX_MODEL_TOKENS:-12000}"
+  AGENT_MAX_MODEL_OUTPUT_TOKENS: "${AGENT_MAX_MODEL_OUTPUT_TOKENS:-1000}"
+  AGENT_RATE_PER_MINUTE: "${AGENT_RATE_PER_MINUTE:-600}"
+  AGENT_RATE_DB_PATH: "${AGENT_RATE_DB_PATH:-/app/data/limits.db}"
+  AGENT_REDIS_URL: "${AGENT_REDIS_URL}"
+  AGENT_ARTIFACT_BACKEND: "${AGENT_ARTIFACT_BACKEND:-local}"
+  AGENT_ARTIFACT_DIR: "${AGENT_ARTIFACT_DIR:-/app/data/artifacts}"
+  AGENT_S3_BUCKET: "${AGENT_S3_BUCKET}"
+  AGENT_S3_ENDPOINT: "${AGENT_S3_ENDPOINT}"
+  AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+  AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+  AWS_SESSION_TOKEN: "${AWS_SESSION_TOKEN}"
+  AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
+  AGENT_OIDC_ISSUER: "${AGENT_OIDC_ISSUER}"
+  AGENT_OIDC_AUDIENCE: "${AGENT_OIDC_AUDIENCE}"
+  AGENT_OIDC_JWKS_URL: "${AGENT_OIDC_JWKS_URL}"
+  AGENT_OIDC_ALGORITHMS: "${AGENT_OIDC_ALGORITHMS:-RS256}"
+  AGENT_OIDC_TENANT_CLAIM: "${AGENT_OIDC_TENANT_CLAIM:-tenant_id}"
+  AGENT_OIDC_ROLES_CLAIM: "${AGENT_OIDC_ROLES_CLAIM:-roles}"
+  AGENT_WEBHOOKS_JSON: "${AGENT_WEBHOOKS_JSON}"
+  AGENT_TELEMETRY_ENABLED: "${AGENT_TELEMETRY_ENABLED:-0}"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+  OTEL_SERVICE_NAME: "${OTEL_SERVICE_NAME:-agentic-system}"
+  OTEL_TRACES_SAMPLER: "${OTEL_TRACES_SAMPLER:-parentbased_always_on}"
+  LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+  OPENAI_API_KEY: "${OPENAI_API_KEY}"
+  OPENAI_API_KEY_FILE: "${OPENAI_API_KEY_FILE}"
+  OPENAI_BASE_URL: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+  OPENAI_CHAT_MODEL: "${OPENAI_CHAT_MODEL:-gpt-4.1-mini}"
+  ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+  ANTHROPIC_API_KEY_FILE: "${ANTHROPIC_API_KEY_FILE}"
+  ANTHROPIC_BASE_URL: "${ANTHROPIC_BASE_URL:-https://api.anthropic.com/v1}"
+  ANTHROPIC_CHAT_MODEL: "${ANTHROPIC_CHAT_MODEL:-claude-sonnet-4-5}"
 
 services:
+  postgres:
+    image: pgvector/pgvector:0.8.7-pg17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Run python scripts/bootstrap_compose.py first}"
+      RAGS_DB_PASSWORD: "${RAGS_DB_PASSWORD:?Run python scripts/bootstrap_compose.py first}"
+      AGENT_DB_PASSWORD: "${AGENT_DB_PASSWORD:?Run python scripts/bootstrap_compose.py first}"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/init-databases.sh:/docker-entrypoint-initdb.d/10-app-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d postgres"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
   rags:
-    build: ../RAGs
+    build:
+      context: ../RAGs
+      args:
+        RAGS_EXTRAS: "${RAGS_EXTRAS:-postgres,pdf,mcp,vision}"
     ports:
       - "127.0.0.1:8000:8000"
     environment:
-      RAGS_ENV: development
-      RAGS_API_KEY: ${RAGS_API_KEY:-local-development-key}
-      RAGS_DB_PATH: /app/data/rags.db
-      RAGS_EMBEDDING_PROVIDER: ${RAGS_EMBEDDING_PROVIDER:-local}
-      RAGS_MODEL_PROVIDER: ${RAGS_MODEL_PROVIDER:-extractive}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
-      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
-      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4.1-mini}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      ANTHROPIC_CHAT_MODEL: ${ANTHROPIC_CHAT_MODEL:-claude-sonnet-4-5}
+      RAGS_ENV: "${RAGS_ENV:-production}"
+      RAGS_API_KEY: "${RAGS_API_KEY}"
+      RAGS_KEYS_JSON: "${RAGS_KEYS_JSON:?Run python scripts/bootstrap_compose.py first}"
+      RAGS_DATABASE_URL: "${RAGS_DATABASE_URL:?Run python scripts/bootstrap_compose.py first}"
+      RAGS_DB_PATH: "${RAGS_DB_PATH:-/app/data/rags.db}"
+      RAGS_FEATURES_FILE: "${RAGS_FEATURES_FILE:-/app/config/rags.features.json}"
+      RAGS_FEATURES_JSON: "${RAGS_FEATURES_JSON}"
+      RAGS_EMBEDDING_PROVIDER: "${RAGS_EMBEDDING_PROVIDER:-local}"
+      RAGS_MODEL_PROVIDER: "${RAGS_MODEL_PROVIDER:-extractive}"
+      RAGS_EMBEDDING_BASE_URL: "${RAGS_EMBEDDING_BASE_URL}"
+      RAGS_EMBEDDING_API_KEY: "${RAGS_EMBEDDING_API_KEY}"
+      RAGS_EMBEDDING_API_KEY_FILE: "${RAGS_EMBEDDING_API_KEY_FILE}"
+      RAGS_EMBEDDING_MODEL: "${RAGS_EMBEDDING_MODEL}"
+      RAGS_GENERATION_BASE_URL: "${RAGS_GENERATION_BASE_URL}"
+      RAGS_GENERATION_API_KEY: "${RAGS_GENERATION_API_KEY}"
+      RAGS_GENERATION_API_KEY_FILE: "${RAGS_GENERATION_API_KEY_FILE}"
+      RAGS_GENERATION_MODEL: "${RAGS_GENERATION_MODEL}"
+      RAGS_TOKENIZER_JSON: "${RAGS_TOKENIZER_JSON}"
+      RAGS_GENERATION_TOKENIZER_JSON: "${RAGS_GENERATION_TOKENIZER_JSON}"
+      RAGS_CHUNKING_JSON: "${RAGS_CHUNKING_JSON}"
+      RAGS_CONTEXT_BUDGET: "${RAGS_CONTEXT_BUDGET:-16000}"
+      RAGS_OUTPUT_BUDGET: "${RAGS_OUTPUT_BUDGET:-1024}"
+      RAGS_ENVELOPE_BUDGET: "${RAGS_ENVELOPE_BUDGET:-256}"
+      RAGS_MAX_ITERATIONS: "${RAGS_MAX_ITERATIONS:-3}"
+      RAGS_SOURCES_JSON: "${RAGS_SOURCES_JSON}"
+      RAGS_FASTEMBED_MODEL: "${RAGS_FASTEMBED_MODEL:-BAAI/bge-small-en-v1.5}"
+      RAGS_MODEL_CACHE: "${RAGS_MODEL_CACHE:-/app/data/models}"
+      RAGS_LATE_INTERACTION_MODEL: "${RAGS_LATE_INTERACTION_MODEL:-answerdotai/answerai-colbert-small-v1}"
+      RAGS_MULTIMODAL_MODEL: "${RAGS_MULTIMODAL_MODEL:-clip-vit-b-32}"
+      RAGS_ADMISSION_POLICY: "${RAGS_ADMISSION_POLICY:-compatibility}"
+      RAGS_ADMISSION_PROFILE: "${RAGS_ADMISSION_PROFILE}"
+      RAGS_RESEARCH_BACKENDS_JSON: "${RAGS_RESEARCH_BACKENDS_JSON}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY}"
+      OPENAI_API_KEY_FILE: "${OPENAI_API_KEY_FILE}"
+      OPENAI_BASE_URL: "${OPENAI_BASE_URL:-https://api.openai.com/v1}"
+      OPENAI_EMBEDDING_MODEL: "${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}"
+      OPENAI_CHAT_MODEL: "${OPENAI_CHAT_MODEL:-gpt-4.1-mini}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+      ANTHROPIC_API_KEY_FILE: "${ANTHROPIC_API_KEY_FILE}"
+      ANTHROPIC_BASE_URL: "${ANTHROPIC_BASE_URL:-https://api.anthropic.com/v1}"
+      ANTHROPIC_CHAT_MODEL: "${ANTHROPIC_CHAT_MODEL:-claude-sonnet-4-5}"
     volumes:
       - rag-data:/app/data
+      - ./data/config:/app/config:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/live',timeout=3)"]
       interval: 5s
-      retries: 10
+      timeout: 4s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
   api:
-    build: .
+    build:
+      context: .
+      args:
+        AGENT_EXTRAS: "${AGENT_EXTRAS:-postgres,mcp}"
     ports:
       - "127.0.0.1:8001:8001"
     environment: *agent-env
-    volumes:
+    volumes: &agent-volumes
       - agent-data:/app/data
+      - ./data/config:/app/config:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rags:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/live', timeout=3)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/live',timeout=3)"]
       interval: 5s
       timeout: 4s
-      retries: 10
+      retries: 20
       start_period: 5s
-    depends_on:
-      rags:
-        condition: service_healthy
+    restart: unless-stopped
+
   worker:
-    build: .
+    build:
+      context: .
+      args:
+        AGENT_EXTRAS: "${AGENT_EXTRAS:-postgres,mcp}"
     command: ["python", "-m", "agentic.worker"]
     environment: *agent-env
-    volumes:
-      - agent-data:/app/data
+    volumes: *agent-volumes
     depends_on:
+      postgres:
+        condition: service_healthy
       rags:
         condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
+  postgres-data:
   rag-data:
   agent-data:

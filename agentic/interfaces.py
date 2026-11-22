@@ -15,23 +15,48 @@ from pydantic import ValidationError
 from agentic.schemas import WorkflowIn
 
 
-def install_interfaces(app, store, submit_callback, authenticator):
-    hooks = json.loads(os.getenv("AGENT_WEBHOOKS_JSON", "{}"))
+def dashboard_html(config):
+    html = (Path(__file__).parent / "static" / "index.html").read_text()
+    features = config.features
+    goal_generation = config.provider == "offline" or features.enabled("model_generation")
+    modes = {name: features.enabled(name) and goal_generation for name in ("dag", "agent_loop")}
+    for mode, enabled in modes.items():
+        if not enabled:
+            html = html.replace(f'<option value="{mode}">', f'<option value="{mode}" disabled>')
+    controls = {"submit": any(modes.values()), "mode": any(modes.values()),
+                "stream": features.enabled("sse"), "stop": features.enabled("sse"),
+                "approve": features.enabled("approvals"), "reject": features.enabled("approvals"),
+                "step": features.enabled("approvals")}
+    for name, enabled in controls.items():
+        if not enabled:
+            html = html.replace(f'id="{name}"', f'id="{name}" disabled data-feature-disabled="true"')
+    if not features.enabled("api_docs"):
+        html = html.replace('<p><a href="/docs">API reference</a></p>', '')
+    return html
+
+
+def install_interfaces(app, store, submit_callback, authenticator, config=None):
+    config = config or authenticator.config
+    features = config.features
+    hooks = json.loads(os.getenv("AGENT_WEBHOOKS_JSON", "{}")) if features.enabled("webhooks") else {}
     if not isinstance(hooks, dict):
         raise ValueError("AGENT_WEBHOOKS_JSON must be an object")
-    for name, config in hooks.items():
-        if not re.fullmatch(r"[a-zA-Z0-9_-]{1,60}", name) or not isinstance(config, dict):
+    for name, hook_config in hooks.items():
+        if not re.fullmatch(r"[a-zA-Z0-9_-]{1,60}", name) or not isinstance(hook_config, dict):
             raise ValueError("Invalid webhook identity")
-        if config.get("tenant") not in authenticator.config.rag_keys or len(config.get("secret", "")) < 24:
+        if hook_config.get("tenant") not in authenticator.config.rag_keys or len(hook_config.get("secret", "")) < 24:
             raise ValueError("Webhooks require a configured tenant and strong secret")
-    with store.connect() as db:
-        db.execute("CREATE TABLE IF NOT EXISTS hook_receipts ("
-                   "hook_id TEXT NOT NULL, digest TEXT NOT NULL, expires_at DOUBLE PRECISION NOT NULL, "
-                   "PRIMARY KEY(hook_id,digest))")
+    if features.enabled("webhooks"):
+        with store.connect() as db:
+            db.execute("CREATE TABLE IF NOT EXISTS hook_receipts ("
+                       "hook_id TEXT NOT NULL, digest TEXT NOT NULL, expires_at DOUBLE PRECISION NOT NULL, "
+                       "PRIMARY KEY(hook_id,digest))")
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     def dashboard():
-        html = (Path(__file__).parent / "static" / "index.html").read_text()
+        if not features.enabled("ui"):
+            raise HTTPException(404, "Not found")
+        html = dashboard_html(config)
         # Inline script is static and hash-authorized; data is rendered via textContent.
         script = html.split("<script>", 1)[1].split("</script>", 1)[0]
         import base64
@@ -49,6 +74,7 @@ def install_interfaces(app, store, submit_callback, authenticator):
         after: int = Query(default=0, ge=0, le=2**63 - 1),
         last_event_id: str | None = Header(default=None),
     ):
+        features.require("sse")
         if last_event_id is not None:
             if (not last_event_id.isascii() or not last_event_id.isdigit()
                     or len(last_event_id) > 19 or int(last_event_id) > 2**63 - 1):
@@ -90,6 +116,7 @@ def install_interfaces(app, store, submit_callback, authenticator):
 
     @app.post("/hooks/workflows", status_code=202)
     async def receive_hook(request: Request):
+        features.require("webhooks")
         identity = request.headers.get("x-agent-hook", "")
         timestamp = request.headers.get("x-agent-timestamp", "")
         signature = request.headers.get("x-agent-signature", "")

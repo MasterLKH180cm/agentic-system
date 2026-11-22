@@ -6,6 +6,7 @@ import os
 import time
 
 from agentic.config import Settings
+from agentic.features import FeatureDisabled
 from agentic.model import ModelGateway
 from agentic.store import BudgetExceeded, LeaseLost, Store
 from agentic.telemetry import get_telemetry, span
@@ -37,7 +38,9 @@ class Worker:
     async def process(self, job: dict) -> None:
         async def execute():
             inputs = self.store.input_results(job["run_id"], job["depends_on"])
-            with span("workflow.step", {"run.id": job["run_id"], "step.id": job["id"], "tool.name": job["tool"]}):
+            snapshot = job.get("specification", {}).get("feature_flags")
+            with span("workflow.step", {"run.id": job["run_id"], "step.id": job["id"], "tool.name": job["tool"]},
+                      allowed=self.tools.config.features.enabled("telemetry", snapshot)):
                 remaining = min(self.timeout, job.get("deadline_at", time.time() + self.timeout) - time.time())
                 return await asyncio.wait_for(self.tools.execute(job, inputs), timeout=max(0, remaining))
 
@@ -59,6 +62,9 @@ class Worker:
         except TimeoutError:
             self.store.complete(job, {"outcome": "deadline", "stop_reason": "step_timeout",
                                       "answer": "Execution stopped at the configured deadline.", "citations": []})
+        except FeatureDisabled as exc:
+            self.store.complete(job, {"outcome": "policy_denied", "stop_reason": "feature_disabled",
+                                      "feature": exc.feature, "answer": str(exc), "citations": []})
         except PermissionError:
             self.store.complete(job, {"outcome": "policy_denied", "stop_reason": "execution_policy",
                                       "answer": "Execution was denied by the workflow policy.", "citations": []})
@@ -111,7 +117,7 @@ class Worker:
 def main() -> None:
     logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
     settings = Settings.from_env()
-    get_telemetry()
+    get_telemetry(settings.features.enabled("telemetry"))
     store = Store(settings.db_path, lease_seconds=settings.lease_seconds, max_attempts=settings.max_attempts,
                   step_timeout_seconds=settings.step_timeout_seconds)
     tools = Tools(settings, ModelGateway(settings, store), store)
