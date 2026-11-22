@@ -790,6 +790,26 @@ REST API. MCP exposes no approval tool.
 
 ## Validation and limits
 
+### Verified v0.4 implementation
+
+[CI 44996511159](https://github.com/MasterLKH180cm/agentic-system/actions/runs/44996511159)
+passed all seven automatic jobs at `6876ccade1d6c85bf87e86722c58162c5c14f88d`,
+with companion RAG `f3c9506b850c0196517861b11cf51ca56d6ed991`.
+The selected suites passed **160 unit tests, 244 ordinary integration tests and
+five actual PostgreSQL/Redis/S3 tests**, with zero selected skips. Coverage across
+all 22 production modules is **90.38% of statements and 82.87% of branches**, with
+zero exclusions and unchanged 85%/75% floors.
+
+Separate process evidence passed **7/7 pgvector/feature checks**, **12/12 actual
+Chromium checks**, and **6/6 resilience checks on each of SQLite and PostgreSQL**.
+HTTP/worker/MCP, actual RAPTOR/LightRAG, frozen-profile admission and the four-service
+Compose deployment passed. Browser and v0.4 lifecycle checks use both PostgreSQL
+stores. See the [v0.4 implementation review](docs/IMPLEMENTATION_REVIEW_V04.md),
+[machine-readable results and source hashes](docs/testing-results-v04.json), and
+[current PR checks](https://github.com/MasterLKH180cm/agentic-system/pull/6/checks).
+
+### Historical baseline and test policy
+
 The last recorded v0.3 local core baseline passed **127 unit tests and 173 integration tests**:
 **300 unique cases, no selected skips**. Collection contains 305 cases; the
 five external-service cases are explicitly deselected from the local core gate.

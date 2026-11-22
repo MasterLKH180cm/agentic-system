@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: f3c9506b850c0196517861b11cf51ca56d6ed991 # exact companion v0.4 implementation commit
+          ref: 5ce98bfa93df42c22645d0e1ad059a7cc9375c89 # exact companion v0.4 implementation commit
           path: external/RAGs
       - uses: actions/setup-python@v5
         with:
@@ -142,7 +142,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: f3c9506b850c0196517861b11cf51ca56d6ed991 # companion v0.4
+          ref: 5ce98bfa93df42c22645d0e1ad059a7cc9375c89 # companion v0.4
           path: external/RAGs
       - name: Put the sibling RAGs build context in place
         run: |
@@ -210,7 +210,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: f3c9506b850c0196517861b11cf51ca56d6ed991 # companion v0.4
+          ref: 5ce98bfa93df42c22645d0e1ad059a7cc9375c89 # companion v0.4
           path: external/RAGs
       - uses: actions/setup-python@v5
         with:
@@ -328,7 +328,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: f3c9506b850c0196517861b11cf51ca56d6ed991 # companion v0.4
+          ref: 5ce98bfa93df42c22645d0e1ad059a7cc9375c89 # companion v0.4
           path: external/RAGs
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -380,7 +380,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: f3c9506b850c0196517861b11cf51ca56d6ed991 # companion v0.4
+          ref: 5ce98bfa93df42c22645d0e1ad059a7cc9375c89 # companion v0.4
           path: external/RAGs
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -475,7 +475,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: f3c9506b850c0196517861b11cf51ca56d6ed991 # exact companion implementation
+          ref: 5ce98bfa93df42c22645d0e1ad059a7cc9375c89 # exact companion implementation
           path: external/RAGs
           persist-credentials: false
       - uses: actions/setup-python@v5

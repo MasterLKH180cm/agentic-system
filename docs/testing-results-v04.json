@@ -1,0 +1,774 @@
+{
+  "schema_version": "implementation-testing-results-v04",
+  "measured_at": "2026-11-22T07:04:32.474727+00:00",
+  "repository": "MasterLKH180cm/agentic-system",
+  "implementation_revision": "6876ccade1d6c85bf87e86722c58162c5c14f88d",
+  "implementation_tree": "46a301611b5b2cc8067de695ecabf230117effec",
+  "ci_run_id": 44996511159,
+  "ci_url": "https://github.com/MasterLKH180cm/agentic-system/actions/runs/44996511159",
+  "core_artifact": {
+    "id": 14744016711,
+    "sha256": "b6979fddb35544302cc28c856c767f90d919ec7f3e2720985979b4d2fe6a9773"
+  },
+  "scope": "Complete production Python package; unit and ordinary integration parent-process execution. External service and independent process/browser execution are separate evidence.",
+  "cases": {
+    "collected": 409,
+    "unit_passed": 160,
+    "ordinary_integration_passed": 244,
+    "ordinary_unique_passed": 404,
+    "selected_skips": 0,
+    "external_service_passed": 5,
+    "all_pytest_unique_passed": 409
+  },
+  "junit_suites": {
+    "junit-integration.xml": {
+      "tests": 244,
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0
+    },
+    "junit-unit.xml": {
+      "tests": 160,
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0
+    }
+  },
+  "coverage": {
+    "covered_lines": 2641,
+    "num_statements": 2922,
+    "covered_branches": 958,
+    "num_branches": 1156,
+    "excluded_lines": 0,
+    "files": 22,
+    "line_percent": 90.3832991101985,
+    "branch_percent": 82.8719723183391,
+    "line_floor": 85,
+    "branch_floor": 75
+  },
+  "production_sha256": {
+    "agentic/__init__.py": "93cbba17866ad838ede59bc1e0d1a8c27b98a4f6a824dbe2aedf53fd40141d60",
+    "agentic/admission.py": "d7151298e10ab40f673478ac8a711aa1316f9143bd83981c3e303088aa3d0a12",
+    "agentic/api.py": "0f4a19c7c112457e080ae8ccf8d0a31522c8849415144fd494abad853a008b75",
+    "agentic/auth.py": "ec5e56cf818a74ef14dcead7862d17d401fc7aaaf00ec30354413b21c0de03c5",
+    "agentic/config.py": "41b420e59224d3da5eca4501c4461800886fd5c4360ca7079a3467d8ae3be962",
+    "agentic/control.py": "c5727da65ef98281bc302966b2346af7dabdf529c834777073c64624265b0b91",
+    "agentic/evidence.py": "1626d329d7c3a7eef03f8e1123181cdddcba7a010b084ea02eb81c6ceb47ace6",
+    "agentic/features.py": "a4bf8d7d7e711b61e7d79bae28f73196b71b7fa4b3f52d0faaa6e4ec7e842744",
+    "agentic/interfaces.py": "eaf39b5cfa9b85195edb27ba583315bd047153949e0e02c7f4d0d156f03588e2",
+    "agentic/limits.py": "ee20a69c4c3057e5c2e4b9bb245dd42b1b5ebd597007a5c9b0a46209598059de",
+    "agentic/mcp_server.py": "e4665764f754b5a6ed03c6a39d011f5c1ff1b2813802c6cf052748deea622291",
+    "agentic/memory.py": "6ce10dfcfe96c1cb8e4cb2ecace8ed39f487b62d9e04e0924213722620081d6e",
+    "agentic/model.py": "799c56fce0066394908b0bbc6b07b4ee84e736da9aff6efc2505c20366dfe6de",
+    "agentic/planner.py": "9db29139d29fef984dbf840d318c48b0faf93ff54ba9c7e08cecbc917d053e8b",
+    "agentic/postgres.py": "04a05c5cd2e5e02fda9d5677bffcbe91ad27131db794d79f3763675bbfe1ccbd",
+    "agentic/runtime.py": "bf8f70868577a55b1936b6f8506aa4df53a323aed40ba66d721850aa93f364db",
+    "agentic/schemas.py": "12ad58caa4bb4524d7996ae9bac52ac44a48688540adf82097fbf39cc5b7d783",
+    "agentic/storage_adapters.py": "2fa864206bdf9d22d7c33564b46394a61010391c9498d6183076ecdd5aeb9281",
+    "agentic/store.py": "da93616e7f7042254594842f7ea5c5bc391dde62e097786f3f0ffec70ac19c5e",
+    "agentic/telemetry.py": "b888b2c9794394e954944e3feab128c411485d56baec426c68073393cd525b4e",
+    "agentic/tools.py": "28285ac9c16c74e87fbf9fb3d6f8b982c8fba896ebd5cac36daf7821b33d9db0",
+    "agentic/worker.py": "e496c520196e2957d80d3df831f475e51aa7f8355d42e724965eca20e42b226f"
+  },
+  "coverage_by_file": {
+    "agentic/__init__.py": {
+      "covered_lines": 0,
+      "num_statements": 0,
+      "percent_covered": 100.0,
+      "percent_covered_display": "100.00",
+      "missing_lines": 0,
+      "excluded_lines": 0,
+      "percent_statements_covered": 100.0,
+      "percent_statements_covered_display": "100.00",
+      "num_branches": 0,
+      "num_partial_branches": 0,
+      "covered_branches": 0,
+      "missing_branches": 0,
+      "percent_branches_covered": 100.0,
+      "percent_branches_covered_display": "100.00"
+    },
+    "agentic/admission.py": {
+      "covered_lines": 195,
+      "num_statements": 200,
+      "percent_covered": 96.49122807017544,
+      "percent_covered_display": "96.49",
+      "missing_lines": 5,
+      "excluded_lines": 0,
+      "percent_statements_covered": 97.5,
+      "percent_statements_covered_display": "97.50",
+      "num_branches": 142,
+      "num_partial_branches": 7,
+      "covered_branches": 135,
+      "missing_branches": 7,
+      "percent_branches_covered": 95.07042253521126,
+      "percent_branches_covered_display": "95.07"
+    },
+    "agentic/api.py": {
+      "covered_lines": 208,
+      "num_statements": 230,
+      "percent_covered": 87.31884057971014,
+      "percent_covered_display": "87.32",
+      "missing_lines": 22,
+      "excluded_lines": 0,
+      "percent_statements_covered": 90.43478260869566,
+      "percent_statements_covered_display": "90.43",
+      "num_branches": 46,
+      "num_partial_branches": 11,
+      "covered_branches": 33,
+      "missing_branches": 13,
+      "percent_branches_covered": 71.73913043478261,
+      "percent_branches_covered_display": "71.74"
+    },
+    "agentic/auth.py": {
+      "covered_lines": 131,
+      "num_statements": 153,
+      "percent_covered": 84.01826484018265,
+      "percent_covered_display": "84.02",
+      "missing_lines": 22,
+      "excluded_lines": 0,
+      "percent_statements_covered": 85.62091503267973,
+      "percent_statements_covered_display": "85.62",
+      "num_branches": 66,
+      "num_partial_branches": 13,
+      "covered_branches": 53,
+      "missing_branches": 13,
+      "percent_branches_covered": 80.3030303030303,
+      "percent_branches_covered_display": "80.30"
+    },
+    "agentic/config.py": {
+      "covered_lines": 144,
+      "num_statements": 158,
+      "percent_covered": 89.38053097345133,
+      "percent_covered_display": "89.38",
+      "missing_lines": 14,
+      "excluded_lines": 0,
+      "percent_statements_covered": 91.13924050632912,
+      "percent_statements_covered_display": "91.14",
+      "num_branches": 68,
+      "num_partial_branches": 10,
+      "covered_branches": 58,
+      "missing_branches": 10,
+      "percent_branches_covered": 85.29411764705883,
+      "percent_branches_covered_display": "85.29"
+    },
+    "agentic/control.py": {
+      "covered_lines": 111,
+      "num_statements": 125,
+      "percent_covered": 86.4321608040201,
+      "percent_covered_display": "86.43",
+      "missing_lines": 14,
+      "excluded_lines": 0,
+      "percent_statements_covered": 88.8,
+      "percent_statements_covered_display": "88.80",
+      "num_branches": 74,
+      "num_partial_branches": 11,
+      "covered_branches": 61,
+      "missing_branches": 13,
+      "percent_branches_covered": 82.43243243243244,
+      "percent_branches_covered_display": "82.43"
+    },
+    "agentic/evidence.py": {
+      "covered_lines": 227,
+      "num_statements": 244,
+      "percent_covered": 91.49484536082474,
+      "percent_covered_display": "91.49",
+      "missing_lines": 17,
+      "excluded_lines": 0,
+      "percent_statements_covered": 93.0327868852459,
+      "percent_statements_covered_display": "93.03",
+      "num_branches": 144,
+      "num_partial_branches": 14,
+      "covered_branches": 128,
+      "missing_branches": 16,
+      "percent_branches_covered": 88.88888888888889,
+      "percent_branches_covered_display": "88.89"
+    },
+    "agentic/features.py": {
+      "covered_lines": 79,
+      "num_statements": 79,
+      "percent_covered": 100.0,
+      "percent_covered_display": "100.00",
+      "missing_lines": 0,
+      "excluded_lines": 0,
+      "percent_statements_covered": 100.0,
+      "percent_statements_covered_display": "100.00",
+      "num_branches": 24,
+      "num_partial_branches": 0,
+      "covered_branches": 24,
+      "missing_branches": 0,
+      "percent_branches_covered": 100.0,
+      "percent_branches_covered_display": "100.00"
+    },
+    "agentic/interfaces.py": {
+      "covered_lines": 111,
+      "num_statements": 126,
+      "percent_covered": 86.11111111111111,
+      "percent_covered_display": "86.11",
+      "missing_lines": 15,
+      "excluded_lines": 0,
+      "percent_statements_covered": 88.0952380952381,
+      "percent_statements_covered_display": "88.10",
+      "num_branches": 54,
+      "num_partial_branches": 10,
+      "covered_branches": 44,
+      "missing_branches": 10,
+      "percent_branches_covered": 81.48148148148148,
+      "percent_branches_covered_display": "81.48"
+    },
+    "agentic/limits.py": {
+      "covered_lines": 74,
+      "num_statements": 80,
+      "percent_covered": 90.17857142857143,
+      "percent_covered_display": "90.18",
+      "missing_lines": 6,
+      "excluded_lines": 0,
+      "percent_statements_covered": 92.5,
+      "percent_statements_covered_display": "92.50",
+      "num_branches": 32,
+      "num_partial_branches": 5,
+      "covered_branches": 27,
+      "missing_branches": 5,
+      "percent_branches_covered": 84.375,
+      "percent_branches_covered_display": "84.38"
+    },
+    "agentic/mcp_server.py": {
+      "covered_lines": 61,
+      "num_statements": 64,
+      "percent_covered": 94.73684210526316,
+      "percent_covered_display": "94.74",
+      "missing_lines": 3,
+      "excluded_lines": 0,
+      "percent_statements_covered": 95.3125,
+      "percent_statements_covered_display": "95.31",
+      "num_branches": 12,
+      "num_partial_branches": 1,
+      "covered_branches": 11,
+      "missing_branches": 1,
+      "percent_branches_covered": 91.66666666666667,
+      "percent_branches_covered_display": "91.67"
+    },
+    "agentic/memory.py": {
+      "covered_lines": 31,
+      "num_statements": 33,
+      "percent_covered": 87.8048780487805,
+      "percent_covered_display": "87.80",
+      "missing_lines": 2,
+      "excluded_lines": 0,
+      "percent_statements_covered": 93.93939393939394,
+      "percent_statements_covered_display": "93.94",
+      "num_branches": 8,
+      "num_partial_branches": 3,
+      "covered_branches": 5,
+      "missing_branches": 3,
+      "percent_branches_covered": 62.5,
+      "percent_branches_covered_display": "62.50"
+    },
+    "agentic/model.py": {
+      "covered_lines": 111,
+      "num_statements": 116,
+      "percent_covered": 94.375,
+      "percent_covered_display": "94.38",
+      "missing_lines": 5,
+      "excluded_lines": 0,
+      "percent_statements_covered": 95.6896551724138,
+      "percent_statements_covered_display": "95.69",
+      "num_branches": 44,
+      "num_partial_branches": 4,
+      "covered_branches": 40,
+      "missing_branches": 4,
+      "percent_branches_covered": 90.9090909090909,
+      "percent_branches_covered_display": "90.91"
+    },
+    "agentic/planner.py": {
+      "covered_lines": 39,
+      "num_statements": 43,
+      "percent_covered": 83.05084745762711,
+      "percent_covered_display": "83.05",
+      "missing_lines": 4,
+      "excluded_lines": 0,
+      "percent_statements_covered": 90.69767441860465,
+      "percent_statements_covered_display": "90.70",
+      "num_branches": 16,
+      "num_partial_branches": 6,
+      "covered_branches": 10,
+      "missing_branches": 6,
+      "percent_branches_covered": 62.5,
+      "percent_branches_covered_display": "62.50"
+    },
+    "agentic/postgres.py": {
+      "covered_lines": 61,
+      "num_statements": 95,
+      "percent_covered": 63.2,
+      "percent_covered_display": "63.20",
+      "missing_lines": 34,
+      "excluded_lines": 0,
+      "percent_statements_covered": 64.21052631578948,
+      "percent_statements_covered_display": "64.21",
+      "num_branches": 30,
+      "num_partial_branches": 4,
+      "covered_branches": 18,
+      "missing_branches": 12,
+      "percent_branches_covered": 60.0,
+      "percent_branches_covered_display": "60.00"
+    },
+    "agentic/runtime.py": {
+      "covered_lines": 126,
+      "num_statements": 135,
+      "percent_covered": 89.3048128342246,
+      "percent_covered_display": "89.30",
+      "missing_lines": 9,
+      "excluded_lines": 0,
+      "percent_statements_covered": 93.33333333333333,
+      "percent_statements_covered_display": "93.33",
+      "num_branches": 52,
+      "num_partial_branches": 11,
+      "covered_branches": 41,
+      "missing_branches": 11,
+      "percent_branches_covered": 78.84615384615384,
+      "percent_branches_covered_display": "78.85"
+    },
+    "agentic/schemas.py": {
+      "covered_lines": 183,
+      "num_statements": 183,
+      "percent_covered": 100.0,
+      "percent_covered_display": "100.00",
+      "missing_lines": 0,
+      "excluded_lines": 0,
+      "percent_statements_covered": 100.0,
+      "percent_statements_covered_display": "100.00",
+      "num_branches": 56,
+      "num_partial_branches": 0,
+      "covered_branches": 56,
+      "missing_branches": 0,
+      "percent_branches_covered": 100.0,
+      "percent_branches_covered_display": "100.00"
+    },
+    "agentic/storage_adapters.py": {
+      "covered_lines": 55,
+      "num_statements": 85,
+      "percent_covered": 61.06194690265487,
+      "percent_covered_display": "61.06",
+      "missing_lines": 30,
+      "excluded_lines": 0,
+      "percent_statements_covered": 64.70588235294117,
+      "percent_statements_covered_display": "64.71",
+      "num_branches": 28,
+      "num_partial_branches": 4,
+      "covered_branches": 14,
+      "missing_branches": 14,
+      "percent_branches_covered": 50.0,
+      "percent_branches_covered_display": "50.00"
+    },
+    "agentic/store.py": {
+      "covered_lines": 359,
+      "num_statements": 374,
+      "percent_covered": 93.87755102040816,
+      "percent_covered_display": "93.88",
+      "missing_lines": 15,
+      "excluded_lines": 0,
+      "percent_statements_covered": 95.98930481283422,
+      "percent_statements_covered_display": "95.99",
+      "num_branches": 116,
+      "num_partial_branches": 15,
+      "covered_branches": 101,
+      "missing_branches": 15,
+      "percent_branches_covered": 87.06896551724138,
+      "percent_branches_covered_display": "87.07"
+    },
+    "agentic/telemetry.py": {
+      "covered_lines": 77,
+      "num_statements": 85,
+      "percent_covered": 87.12871287128714,
+      "percent_covered_display": "87.13",
+      "missing_lines": 8,
+      "excluded_lines": 0,
+      "percent_statements_covered": 90.58823529411765,
+      "percent_statements_covered_display": "90.59",
+      "num_branches": 16,
+      "num_partial_branches": 5,
+      "covered_branches": 11,
+      "missing_branches": 5,
+      "percent_branches_covered": 68.75,
+      "percent_branches_covered_display": "68.75"
+    },
+    "agentic/tools.py": {
+      "covered_lines": 186,
+      "num_statements": 213,
+      "percent_covered": 83.06709265175719,
+      "percent_covered_display": "83.07",
+      "missing_lines": 27,
+      "excluded_lines": 0,
+      "percent_statements_covered": 87.32394366197182,
+      "percent_statements_covered_display": "87.32",
+      "num_branches": 100,
+      "num_partial_branches": 26,
+      "covered_branches": 74,
+      "missing_branches": 26,
+      "percent_branches_covered": 74.0,
+      "percent_branches_covered_display": "74.00"
+    },
+    "agentic/worker.py": {
+      "covered_lines": 72,
+      "num_statements": 101,
+      "percent_covered": 66.66666666666667,
+      "percent_covered_display": "66.67",
+      "missing_lines": 29,
+      "excluded_lines": 0,
+      "percent_statements_covered": 71.2871287128713,
+      "percent_statements_covered_display": "71.29",
+      "num_branches": 28,
+      "num_partial_branches": 4,
+      "covered_branches": 14,
+      "missing_branches": 14,
+      "percent_branches_covered": 50.0,
+      "percent_branches_covered_display": "50.00"
+    }
+  },
+  "unchanged_limits": [
+    "No live paid-generation quality claim.",
+    "No default calibration profile promotion; frozen quality gates remain unchanged.",
+    "Exact pgvector search; ANN recall/throughput and production failover are unmeasured."
+  ],
+  "automatic_jobs_passed": 7,
+  "companion_rag_implementation_revision": "f3c9506b850c0196517861b11cf51ca56d6ed991",
+  "pgvector-http-v04": {
+    "status": "passed",
+    "schema_version": "pgvector-http-v04",
+    "expected_checks": [
+      "native_postgres_identity",
+      "tenant_revision_and_filter_scope",
+      "rag_restart_persistence",
+      "independent_worker_and_mcp",
+      "disabled_http_and_mcp",
+      "disabled_agent_submission",
+      "historical_purge"
+    ],
+    "checks": [
+      {
+        "id": "native_postgres_identity",
+        "passed": true,
+        "vector_extension": "0.8.7",
+        "native_type": "vector"
+      },
+      {
+        "id": "tenant_revision_and_filter_scope",
+        "passed": true,
+        "authorized_revisions": 2,
+        "foreign_citations": 0
+      },
+      {
+        "id": "rag_restart_persistence",
+        "passed": true,
+        "same_revision_and_citations": true
+      },
+      {
+        "id": "independent_worker_and_mcp",
+        "passed": true,
+        "terminal_state": "completed"
+      },
+      {
+        "id": "disabled_http_and_mcp",
+        "passed": true,
+        "mutation_rejected": true,
+        "query_rejected": true,
+        "shipped_mcp_listing_and_rejection": true
+      },
+      {
+        "id": "disabled_agent_submission",
+        "passed": true,
+        "no_new_workflow": true
+      },
+      {
+        "id": "historical_purge",
+        "passed": true,
+        "history_purged": true,
+        "other_tenant_preserved": true
+      }
+    ],
+    "live_paid_provider": false,
+    "database_state_modified_by_test": false,
+    "storage": {
+      "rag": {
+        "backend": "postgresql",
+        "vector_search": "pgvector_exact"
+      },
+      "agent": {
+        "backend": "postgresql",
+        "memory_search": "lexical"
+      }
+    },
+    "cleanup_completed": true,
+    "elapsed_seconds": 7.205,
+    "measured_at": "2026-11-22T07:05:41.343765+00:00"
+  },
+  "resilience-postgres": {
+    "schema_version": "agent-resilience-e2e-v1",
+    "status": "passed",
+    "expected_checks": [
+      "worker_crash_recovery",
+      "cancel_late_result_fencing",
+      "sse_cursor_reconnect",
+      "transient_http_retry",
+      "retry_exhaustion",
+      "persisted_step_deadline"
+    ],
+    "checks": [
+      {
+        "id": "worker_crash_recovery",
+        "passed": true,
+        "read_attempts": 2,
+        "committed_dependency_attempts": 1,
+        "deadline_preserved": true,
+        "http_and_mcp_agree": true
+      },
+      {
+        "id": "cancel_late_result_fencing",
+        "passed": true,
+        "dependent_publication_attempts": 0,
+        "late_result_committed": false,
+        "http_and_mcp_agree": true
+      },
+      {
+        "id": "sse_cursor_reconnect",
+        "passed": true,
+        "cursor": 10,
+        "resumed_events": 2,
+        "duplicates": 0,
+        "persisted_events_match": true
+      },
+      {
+        "id": "transient_http_retry",
+        "passed": true,
+        "http_attempts": 2,
+        "actual_rag_requests": 1
+      },
+      {
+        "id": "retry_exhaustion",
+        "passed": true,
+        "http_attempts": 2,
+        "dependent_publication_attempts": 0
+      },
+      {
+        "id": "persisted_step_deadline",
+        "passed": true,
+        "attempts": 1,
+        "dependent_publication_attempts": 0
+      }
+    ],
+    "backend": "postgresql",
+    "real_services": [
+      "rag-http",
+      "agent-http",
+      "independent-worker",
+      "fixed-localhost-fault-proxy",
+      "stdio-mcp"
+    ],
+    "database_state_modified_by_test": false,
+    "live_paid_provider": false,
+    "storage": {
+      "rag": {
+        "backend": "postgresql",
+        "vector_search": "pgvector_exact"
+      },
+      "agent": {
+        "backend": "postgresql",
+        "memory_search": "lexical"
+      }
+    },
+    "cleanup_completed": true,
+    "elapsed_seconds": 17.907,
+    "measured_at": "2026-11-22T07:05:33.940087+00:00"
+  },
+  "browser_evidence": {
+    "schema_version": "agent-browser-e2e-v1",
+    "status": "passed",
+    "expected_checks": [
+      "successful_workflow",
+      "evidence_refusal",
+      "unauthorized_access",
+      "approval_separation",
+      "stream_view_ownership",
+      "stale_status_response",
+      "stale_submission_response",
+      "credential_lifetime",
+      "actionable_request_errors",
+      "ambiguous_submission_retry",
+      "malformed_acknowledgement_retry",
+      "submission_identity_lifetime"
+    ],
+    "checks": [
+      {
+        "id": "successful_workflow",
+        "passed": true,
+        "actual_evidence": true,
+        "terminal_stream": true
+      },
+      {
+        "id": "evidence_refusal",
+        "passed": true,
+        "factual_answer": false,
+        "terminal_status": "failed"
+      },
+      {
+        "id": "unauthorized_access",
+        "passed": true,
+        "invalid_credential": 401,
+        "other_tenant": 404
+      },
+      {
+        "id": "approval_separation",
+        "passed": true,
+        "requester_rejected": true,
+        "artifact_value": 42
+      },
+      {
+        "id": "stream_view_ownership",
+        "passed": true,
+        "same_run_cursor_reused": true,
+        "cross_run_cursor_reused": false,
+        "credential_change_aborts": true,
+        "old_events_in_new_view": 0
+      },
+      {
+        "id": "stale_status_response",
+        "passed": true,
+        "actual_response_delayed": true
+      },
+      {
+        "id": "stale_submission_response",
+        "passed": true,
+        "actual_submission_completed": true
+      },
+      {
+        "id": "credential_lifetime",
+        "passed": true,
+        "authorization_header_only": true,
+        "storage_empty": true,
+        "credential_absent_after_reload": true
+      },
+      {
+        "id": "actionable_request_errors",
+        "passed": true,
+        "real_validation_status": 422,
+        "non_json_status": 503,
+        "messages_bounded": true,
+        "earlier_uncertainty_preserved": true
+      },
+      {
+        "id": "ambiguous_submission_retry",
+        "passed": true,
+        "real_committed_response_discarded": true,
+        "duplicate_recognized": true,
+        "durable_runs_after_retry": 1,
+        "step_attempts": 1
+      },
+      {
+        "id": "malformed_acknowledgement_retry",
+        "passed": true,
+        "variants": [
+          "invalid_json",
+          "invalid_id",
+          "invalid_unicode_id",
+          "path_id",
+          "control_id",
+          "invalid_duplicate",
+          "unexpected_status"
+        ],
+        "actual_commits_recovered": 7,
+        "repeated_executions": 0
+      },
+      {
+        "id": "submission_identity_lifetime",
+        "passed": true,
+        "fresh_after_acknowledgement": true,
+        "changed_inputs": [
+          "goal",
+          "mode",
+          "credential"
+        ],
+        "obsolete_acknowledgement_fenced": true,
+        "storage_empty_while_pending": true,
+        "fresh_after_reload": true
+      }
+    ],
+    "backend": "postgresql",
+    "real_services": [
+      "rag-http",
+      "agent-http",
+      "independent-worker",
+      "chromium"
+    ],
+    "live_paid_provider": false,
+    "page_errors": [],
+    "screenshots": [
+      "reports/testing/browser-artifacts/successful-workflow.png",
+      "reports/testing/browser-artifacts/evidence-refusal.png",
+      "reports/testing/browser-artifacts/approved-publication.png",
+      "reports/testing/browser-artifacts/stream-isolation.png",
+      "reports/testing/browser-artifacts/validation-error.png",
+      "reports/testing/browser-artifacts/retried-submission.png"
+    ],
+    "storage": {
+      "rag": {
+        "backend": "postgresql",
+        "vector_search": "pgvector_exact"
+      },
+      "agent": {
+        "backend": "postgresql",
+        "memory_search": "lexical"
+      }
+    },
+    "browser_version": "151.0.7922.34",
+    "browser_closed": true,
+    "cleanup_completed": true,
+    "elapsed_seconds": 15.439,
+    "measured_at": "2026-11-22T07:05:27.567744+00:00"
+  },
+  "compose_evidence": {
+    "status": "passed",
+    "checks": [
+      {
+        "id": "configuration_and_role_wiring",
+        "passed": true,
+        "application_environments_equal": true
+      },
+      {
+        "id": "actual_pgvector_stack_and_restart",
+        "passed": true,
+        "native_vector_type": "vector",
+        "vector_extension": "0.8.7",
+        "independent_worker": true,
+        "data_survived_restart": true
+      }
+    ],
+    "live_paid_provider": false,
+    "measured_at": "2026-11-22T07:05:01.892065+00:00"
+  },
+  "external_evidence": [
+    {
+      "name": "SQLite HTTP/worker/MCP v0.2 and v0.3",
+      "status": "passed"
+    },
+    {
+      "name": "SQLite resilience",
+      "checks_passed": 6,
+      "status": "passed"
+    },
+    {
+      "name": "PostgreSQL HTTP/worker/MCP v0.2 and v0.3",
+      "status": "passed"
+    },
+    {
+      "name": "actual RAPTOR to Agent worker and MCP",
+      "status": "passed"
+    },
+    {
+      "name": "actual LightRAG to Agent worker and MCP",
+      "status": "passed"
+    },
+    {
+      "name": "frozen Qwen profile through RAG HTTP and Agent worker",
+      "status": "passed"
+    }
+  ]
+}
