@@ -33,16 +33,29 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 5ce98bfa93df42c22645d0e1ad059a7cc9375c89 # exact companion v0.4 implementation commit
+          ref: 049e217493b8a216108ff513262a2c50a2438cf1 # exact companion with uv.lock
           path: external/RAGs
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: pip
+          python-version-file: .python-version
+      - name: Set up uv and dependency cache
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.9"
+          enable-cache: true
+          cache-suffix: ${{ github.job }}
+          cache-dependency-glob: |
+            uv.lock
+            external/RAGs/uv.lock
+            external/RAGs/requirements/*.txt
       - name: Install both services
         run: |
-          python -m pip install -e ".[dev,mcp,telemetry]"
-          python -m pip install -e "./external/RAGs[mcp]"
+          uv sync --locked --extra dev --extra mcp --extra telemetry
+          uv export --locked --extra dev --extra mcp --extra telemetry --no-hashes --no-emit-project --quiet --output-file "$RUNNER_TEMP/agent-constraints.txt"
+          uv export --project external/RAGs --locked --extra mcp --no-hashes --no-emit-project --quiet --output-file "$RUNNER_TEMP/rags-requirements.txt"
+          uv pip install --python .venv/bin/python --constraint "$RUNNER_TEMP/agent-constraints.txt" --requirement "$RUNNER_TEMP/rags-requirements.txt" -e "./external/RAGs[mcp]"
+          uv pip check --python .venv/bin/python
+          printf '%s\n' "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
       - name: Static analysis
         run: |
           ruff check agentic tests scripts conftest.py --select E4,E7,E9,F
@@ -142,7 +155,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 5ce98bfa93df42c22645d0e1ad059a7cc9375c89 # companion v0.4
+          ref: 049e217493b8a216108ff513262a2c50a2438cf1 # companion with uv.lock
           path: external/RAGs
       - name: Put the sibling RAGs build context in place
         run: |
@@ -210,13 +223,29 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 5ce98bfa93df42c22645d0e1ad059a7cc9375c89 # companion v0.4
+          ref: 049e217493b8a216108ff513262a2c50a2438cf1 # companion with uv.lock
           path: external/RAGs
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: pip
-      - run: python -m pip install -e ".[dev,mcp,postgres,storage,telemetry]" -e "./external/RAGs[mcp,postgres]"
+          python-version-file: .python-version
+      - name: Set up uv and dependency cache
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.9"
+          enable-cache: true
+          cache-suffix: ${{ github.job }}
+          cache-dependency-glob: |
+            uv.lock
+            external/RAGs/uv.lock
+            external/RAGs/requirements/*.txt
+      - name: Install both locked service environments
+        run: |
+          uv sync --locked --extra dev --extra mcp --extra postgres --extra storage --extra telemetry
+          uv export --locked --extra dev --extra mcp --extra postgres --extra storage --extra telemetry --no-hashes --no-emit-project --quiet --output-file "$RUNNER_TEMP/agent-constraints.txt"
+          uv export --project external/RAGs --locked --extra mcp --extra postgres --no-hashes --no-emit-project --quiet --output-file "$RUNNER_TEMP/rags-requirements.txt"
+          uv pip install --python .venv/bin/python --constraint "$RUNNER_TEMP/agent-constraints.txt" --requirement "$RUNNER_TEMP/rags-requirements.txt" -e "./external/RAGs[mcp,postgres]"
+          uv pip check --python .venv/bin/python
+          printf '%s\n' "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
       - name: Checkout the fixed upstream S3 server source
         uses: actions/checkout@v4
         with:
@@ -328,23 +357,34 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 5ce98bfa93df42c22645d0e1ad059a7cc9375c89 # companion v0.4
+          ref: 049e217493b8a216108ff513262a2c50a2438cf1 # companion with uv.lock
           path: external/RAGs
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: |
-            pyproject.toml
-            external/RAGs/pyproject.toml
-            external/RAGs/requirements/research-*.txt
+          python-version-file: .python-version
+      - name: Set up uv and dependency cache
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.9"
+          enable-cache: true
+          cache-suffix: ${{ github.job }}-${{ matrix.engine }}
+          cache-dependency-glob: |
+            uv.lock
+            external/RAGs/uv.lock
+            external/RAGs/requirements/*.txt
       - uses: actions/cache@v4
         with:
           path: /tmp/agent-research-models
           key: agent-research-bge-v03-${{ runner.os }}
       - name: Install Agent and both HTTP-backed MCP bridges
-        run: python -m pip install -e ".[dev,mcp,telemetry]" -e "./external/RAGs[mcp]"
+        run: |
+          uv sync --locked --extra dev --extra mcp --extra telemetry
+          uv export --locked --extra dev --extra mcp --extra telemetry --no-hashes --no-emit-project --quiet --output-file "$RUNNER_TEMP/agent-constraints.txt"
+          uv export --project external/RAGs --locked --extra mcp --no-hashes --no-emit-project --quiet --output-file "$RUNNER_TEMP/rags-requirements.txt"
+          uv pip install --python .venv/bin/python --constraint "$RUNNER_TEMP/agent-constraints.txt" --requirement "$RUNNER_TEMP/rags-requirements.txt" -e "./external/RAGs[mcp]"
+          uv pip check --python .venv/bin/python
+          printf '%s\n' "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
       - name: Install the isolated pinned upstream environment
         shell: bash
         run: |
@@ -380,23 +420,34 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 5ce98bfa93df42c22645d0e1ad059a7cc9375c89 # companion v0.4
+          ref: 049e217493b8a216108ff513262a2c50a2438cf1 # companion with uv.lock
           path: external/RAGs
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: |
-            pyproject.toml
-            external/RAGs/pyproject.toml
-            external/RAGs/requirements/answerability.txt
+          python-version-file: .python-version
+      - name: Set up uv and dependency cache
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.9"
+          enable-cache: true
+          cache-suffix: ${{ github.job }}
+          cache-dependency-glob: |
+            uv.lock
+            external/RAGs/uv.lock
+            external/RAGs/requirements/*.txt
       - uses: actions/cache@v4
         with:
           path: /tmp/agent-answerability-models
           key: agent-qwen-1.7b-70d244cc-v03-${{ runner.os }}
       - name: Install Agent and both HTTP-backed MCP bridges
-        run: python -m pip install -e ".[dev,mcp,telemetry]" -e "./external/RAGs[mcp]"
+        run: |
+          uv sync --locked --extra dev --extra mcp --extra telemetry
+          uv export --locked --extra dev --extra mcp --extra telemetry --no-hashes --no-emit-project --quiet --output-file "$RUNNER_TEMP/agent-constraints.txt"
+          uv export --project external/RAGs --locked --extra mcp --no-hashes --no-emit-project --quiet --output-file "$RUNNER_TEMP/rags-requirements.txt"
+          uv pip install --python .venv/bin/python --constraint "$RUNNER_TEMP/agent-constraints.txt" --requirement "$RUNNER_TEMP/rags-requirements.txt" -e "./external/RAGs[mcp]"
+          uv pip check --python .venv/bin/python
+          printf '%s\n' "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
       - name: Install the isolated pinned CPU answerability environment
         shell: bash
         run: |
@@ -475,15 +526,30 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 5ce98bfa93df42c22645d0e1ad059a7cc9375c89 # exact companion implementation
+          ref: 049e217493b8a216108ff513262a2c50a2438cf1 # exact companion implementation
           path: external/RAGs
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: pip
+          python-version-file: .python-version
+      - name: Set up uv and dependency cache
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.9"
+          enable-cache: true
+          cache-suffix: ${{ github.job }}
+          cache-dependency-glob: |
+            uv.lock
+            external/RAGs/uv.lock
+            external/RAGs/requirements/*.txt
       - name: Install both services and pinned browser driver
-        run: python -m pip install -e ".[dev,mcp,postgres,telemetry,e2e]" -e "./external/RAGs[mcp,postgres]"
+        run: |
+          uv sync --locked --extra dev --extra mcp --extra postgres --extra telemetry --extra e2e
+          uv export --locked --extra dev --extra mcp --extra postgres --extra telemetry --extra e2e --no-hashes --no-emit-project --quiet --output-file "$RUNNER_TEMP/agent-constraints.txt"
+          uv export --project external/RAGs --locked --extra mcp --extra postgres --no-hashes --no-emit-project --quiet --output-file "$RUNNER_TEMP/rags-requirements.txt"
+          uv pip install --python .venv/bin/python --constraint "$RUNNER_TEMP/agent-constraints.txt" --requirement "$RUNNER_TEMP/rags-requirements.txt" -e "./external/RAGs[mcp,postgres]"
+          uv pip check --python .venv/bin/python
+          printf '%s\n' "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
       - name: Prepare the isolated vector knowledge database
         run: |
           python - <<'PYTHON'

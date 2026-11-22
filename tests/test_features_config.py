@@ -1,6 +1,7 @@
 """Strict operator flags, immutable snapshots, and purpose-specific routing."""
 from dataclasses import replace
 import json
+import os
 
 import pytest
 
@@ -9,6 +10,47 @@ from agentic.features import FEATURE_DEFAULTS, MAX_CONFIG_BYTES, TOOL_FEATURES, 
 from agentic.model import ModelGateway
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.fixture
+def database_environment(monkeypatch):
+    for name in tuple(os.environ):
+        if name.startswith(("AGENT_", "OPENAI_", "ANTHROPIC_")):
+            monkeypatch.delenv(name)
+    monkeypatch.setenv("AGENT_ENV", "test")
+    return monkeypatch
+
+
+@pytest.mark.parametrize("database_url", [
+    "mysql://user:private-password@localhost/app", "sqlite:///local.db",
+    "postgresql+psycopg://user:private-password@localhost/app", "postgresql:/localhost/app",
+    " data/agentic.db", " ",
+])
+def test_database_url_rejects_other_schemes_without_disclosing_credentials(database_environment, database_url):
+    database_environment.setenv("AGENT_DATABASE_URL", database_url)
+    with pytest.raises(ValueError, match="AGENT_DATABASE_URL must select PostgreSQL") as error:
+        Settings.from_env()
+    assert "private-password" not in str(error.value)
+
+
+@pytest.mark.parametrize("scheme", ["postgresql", "postgres"])
+def test_explicit_postgres_url_takes_precedence_over_local_path(database_environment, scheme):
+    database_url = f"{scheme}://app@localhost/workflows"
+    database_environment.setenv("AGENT_DATABASE_URL", database_url)
+    database_environment.setenv("AGENT_DB_PATH", "data/legacy.db")
+    assert Settings.from_env().db_path == database_url
+
+
+@pytest.mark.parametrize("database_url", [None, ""])
+def test_unset_database_url_retains_explicit_sqlite_path(database_environment, tmp_path, database_url):
+    if database_url is None:
+        database_environment.delenv("AGENT_DATABASE_URL", raising=False)
+    else:
+        database_environment.setenv("AGENT_DATABASE_URL", database_url)
+    path = str(tmp_path / "legacy.db")
+    database_environment.setenv("AGENT_DB_PATH", path)
+    assert Settings.from_env().db_path == path
+    assert not (tmp_path / "legacy.db").exists()
 
 
 def test_manifest_defaults_and_snapshot_permissions_are_immutable():

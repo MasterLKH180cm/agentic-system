@@ -42,7 +42,7 @@ def create_server(features: Features | None = None):
     try:
         from mcp.server.fastmcp import FastMCP
     except ImportError as exc:
-        raise SystemExit("Install MCP support: pip install -e '.[mcp]'") from exc
+        raise SystemExit("Install MCP support: uv sync --locked --extra mcp (include other selected extras)") from exc
     server = FastMCP("agentic-workflows")
 
     def checked(*, submitting=False):

@@ -2,8 +2,13 @@
   "mcpServers": {
     "agentic_workflows": {
       "type": "stdio",
-      "command": "python",
+      "command": "uv",
       "args": [
+        "run",
+        "--directory",
+        "/ABSOLUTE/PATH/TO/agentic-system",
+        "--no-sync",
+        "python",
         "-m",
         "agentic.mcp_server"
       ]

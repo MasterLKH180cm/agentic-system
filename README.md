@@ -31,6 +31,7 @@ contract, executed checks, and remaining boundaries.
 - [Models and budgets](#models-and-budgets)
 - [Feature configuration](#feature-configuration)
 - [Deployment configuration](#deployment-configuration)
+- [Python environments with uv](#python-environments-with-uv)
 - [MCP clients](#mcp-clients)
 - [Validation and limits](#validation-and-limits)
 
@@ -128,9 +129,46 @@ docker compose down  # Retains named data volumes.
 ```
 
 Capabilities must report `storage.backend=postgresql`; RAG health additionally
-reports `storage.vector_search=pgvector_exact`. Each application has its own
-database and non-superuser role. The deployment does not automatically copy
-legacy SQLite state; see [database changes and backups](#database-changes-and-backups).
+reports `storage.vector_search=pgvector_exact`. These identify the selected storage
+configuration; Agent `/capabilities` is not a fresh database ping, and `/live`
+reports process liveness. Each application has its own database and non-superuser
+role. The deployment does not automatically copy legacy SQLite state; see
+[database changes and backups](#database-changes-and-backups).
+
+| Startup method | Workflow store | RAG knowledge store | Required configuration |
+| --- | --- | --- | --- |
+| Supplied Docker Compose | PostgreSQL | PostgreSQL with native pgvector | Generated private `.env` and mounted feature files |
+| Separate Python/uv processes with PostgreSQL DSNs | PostgreSQL | PostgreSQL with native pgvector | Reachable `AGENT_DATABASE_URL` and `RAGS_DATABASE_URL`, database roles and the RAG `vector` extension |
+| Explicit local Python/uv setup without DSNs | SQLite | SQLite with local exact vector ranking | `AGENT_DB_PATH` and `RAGS_DB_PATH`; intended for offline development |
+
+Do not source the Compose `.env` into host Python processes unchanged: its
+`postgres` hostname and `/app/config` paths belong to the container network and
+filesystem, and the database port is not published. Use the
+[separate-process production setup](#production-credential-bootstrap) for an
+operator-managed database. A nonempty `AGENT_DATABASE_URL` only accepts
+`postgresql://` or `postgres://`; a typo or unsupported scheme fails during
+configuration instead of becoming a SQLite filename. A selected PostgreSQL
+connection failure does not switch to SQLite.
+
+Agent memory remains bounded lexical retrieval. Native vector storage belongs
+to RAGs; its core pgvector path does not use FAISS. The optional isolated RAPTOR
+dependency set includes `faiss-cpu`, but this integration selects its tree
+retriever, not its FAISS retriever.
+
+For a disposable development deployment, verify real writes, workflow execution
+and restart persistence with:
+
+```bash
+python scripts/check_compose.py --live --report reports/testing/compose-stack.json
+```
+
+This smoke command writes test data and restarts services; it is not a read-only
+health check. To inspect the database extension without restarting services:
+
+```bash
+docker compose exec -T postgres psql -U postgres -d rags -c \
+  "SELECT extname, extversion FROM pg_extension WHERE extname = 'vector';"
+```
 
 The dashboard shows field-specific validation messages. If a submission is
 unconfirmed because its response was lost, keep the page open and retry with
@@ -444,6 +482,36 @@ The full stack mounts both files and forwards each map only to the relevant serv
 
 ## Deployment configuration
 
+### Python environments with uv
+
+Local setup and CI use `uv.lock`; Docker uses uv 0.13.9 with a reusable dependency
+layer. [Install uv](https://docs.astral.sh/uv/getting-started/installation/) once;
+Linux/macOS/WSL users can install the same pinned version with:
+
+```bash
+curl -LsSf https://astral.sh/uv/0.13.9/install.sh | sh
+uv --version
+```
+
+The checked-in `.python-version` selects Python 3.12 for development and CI; the
+package still declares Python 3.11+. `uv sync --locked` creates `.venv`, checks
+that the lock matches `pyproject.toml`, and installs only selected extras. Models,
+weights and research environments are separate; ordinary setup does not install
+all extras or download trained models. Docker users do not need host uv.
+
+`uv sync` removes packages outside the selected dependency set. Include all the
+extras you want in each sync command, then use `uv run --no-sync` or activate
+`.venv` to run them without changing that selection. This also preserves the
+companion RAG package added for two-service tests. Enabling a feature flag does
+not install its optional dependency or configure a provider.
+
+For an intentional dependency update, run `uv lock --upgrade-package PACKAGE`,
+review the `uv.lock` diff, repeat your full sync command and run the affected
+checks. Commit `pyproject.toml` and `uv.lock` together when requirements change.
+CI and Docker use the committed lock; they do not resolve fresh versions during
+application startup. The [uv workflow specification](docs/UV_WORKFLOW_SPEC.md)
+records the migration and database-selection requirements.
+
 ### Explicit SQLite Python processes
 
 This is the offline/legacy SQLite path, separate from the default PostgreSQL Compose deployment.
@@ -452,9 +520,7 @@ Start RAGs using its [explicit SQLite development instructions](https://github.c
 In this repository, create an environment once:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[dev,mcp]'
+uv sync --locked --extra dev --extra mcp
 ```
 
 Run this setup in **both terminals**, from the same repository directory:
@@ -470,15 +536,16 @@ export AGENT_MODEL_PROVIDER=offline
 unset AGENT_DATABASE_URL AGENT_FEATURES_FILE
 ```
 
-Start `uvicorn agentic.api:app --host 127.0.0.1 --port 8001` in one terminal and
-`python -m agentic.worker` in the other. Both processes must share persistence,
+Start `uv run --no-sync uvicorn agentic.api:app --host 127.0.0.1 --port 8001` in one terminal and
+`uv run --no-sync python -m agentic.worker` in the other. Both processes must share persistence,
 policy, model, and artifact configuration. Python reads exported environment
 variables; it does not automatically load `.env`.
 
 ### Optional services and production identity
 
-Install optional adapters with
-`python -m pip install -e '.[postgres,storage,telemetry]'`.
+Install optional adapters alongside the development/MCP selection with
+`uv sync --locked --extra dev --extra mcp --extra postgres --extra storage --extra telemetry`.
+Omit `--extra dev` for an environment that does not need testing tools.
 [.env.example](.env.example) lists settings; apply them to the relevant processes.
 
 | Settings | Purpose and boundary |
@@ -490,7 +557,7 @@ Install optional adapters with
 | `AGENT_RAG_ADMISSION_POLICY` | `compatibility` or `calibrated_required`, snapshotted for new workflows |
 | `AGENT_RAG_ADMISSION_PROFILE_IDS_JSON` | Required-policy profile allowlist, resolved and snapshotted with the run |
 | `AGENT_RAG_TIMEOUT_SECONDS` | Whole RAG HTTP exchange, default 180 seconds, finite range 1–360; durable worker deadlines still apply |
-| `AGENT_DATABASE_URL` | PostgreSQL DSN; otherwise `AGENT_DB_PATH` selects SQLite |
+| `AGENT_DATABASE_URL` | Explicit `postgresql://` or `postgres://` DSN; unsupported schemes fail. If unset/empty, `AGENT_DB_PATH` selects SQLite |
 | `AGENT_REDIS_URL` | Shared rate-limit counters; otherwise a local SQLite limiter is used |
 | `AGENT_ARTIFACT_BACKEND=s3`, `AGENT_S3_BUCKET` | S3 artifacts; optional `AGENT_S3_ENDPOINT` for a compatible service |
 | `AGENT_TELEMETRY_ENABLED=1`, `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP HTTP traces/metrics with restricted metadata attributes |
@@ -527,8 +594,9 @@ valid Unicode; a rejected replacement preserves the original readable record.
 The regular Compose bootstrap already generates production-strength credentials
 for its private PostgreSQL deployment. The alternative below configures separate
 Python processes against operator-managed PostgreSQL. Install each repository's
-`postgres` extra first, pre-create both databases/application roles and the RAG
-`vector` extension, and export their reachable `AGENT_DATABASE_URL` and
+`postgres` extra first with `uv sync --locked --extra postgres --extra mcp`
+(in each repository; include other desired extras), pre-create both
+databases/application roles and the RAG `vector` extension, and export their reachable `AGENT_DATABASE_URL` and
 `RAGS_DATABASE_URL`. It does not publish the Compose database port.
 
 For the two-service setup, generate three distinct credentials for one tenant,
@@ -607,9 +675,9 @@ set +a
 
 | Terminal | Repository | Start command |
 | --- | --- | --- |
-| RAG API | `RAGs` | `uvicorn rags.api:app --host 127.0.0.1 --port 8000` |
-| Agent API | `agentic-system` | `uvicorn agentic.api:app --host 127.0.0.1 --port 8001` |
-| Agent worker | `agentic-system` | `python -m agentic.worker` |
+| RAG API | `RAGs` | `uv run --no-sync uvicorn rags.api:app --host 127.0.0.1 --port 8000` |
+| Agent API | `agentic-system` | `uv run --no-sync uvicorn agentic.api:app --host 127.0.0.1 --port 8001` |
+| Agent worker | `agentic-system` | `uv run --no-sync python -m agentic.worker` |
 
 Both Agent processes must load the same configuration, including persistence,
 artifact paths, tenant/RAG mappings, policies, admission controls, and model
@@ -779,9 +847,11 @@ destroys volumes and belongs only in disposable test cleanup.
 ## MCP clients
 
 Use the [Codex](docs/codex-mcp.toml) or [Claude Code](docs/claude-mcp.json) local
-configuration examples. Install `.[mcp]` in the client's Python environment and
-register `python -m agentic.mcp_server` with `AGENT_URL` and `AGENT_API_KEY`.
-Use the virtual environment's absolute Python path when necessary.
+configuration examples. Prepare this repository with `uv sync --locked --extra mcp`
+(include other extras you want to retain), and register
+`uv run --directory /ABSOLUTE/PATH/TO/agentic-system --no-sync python -m agentic.mcp_server`
+with `AGENT_URL` and `AGENT_API_KEY`. Replace the sample repository path so the
+client uses the prepared environment independently of its working directory.
 
 The bridge exposes `start_research_workflow`, `get_workflow_status`, and
 `get_workflow_events`. API and worker must already be running. The submission
@@ -789,6 +859,10 @@ tool accepts a goal; advanced registry, memory, and loop configuration uses the
 REST API. MCP exposes no approval tool.
 
 ## Validation and limits
+
+The [uv workflow review](docs/UV_WORKFLOW_REVIEW.md) records this migration's
+local validation and new database-selection tests. The versioned evidence below
+retains its original tested commit and scope.
 
 ### Verified v0.4 implementation
 
@@ -851,16 +925,26 @@ Run from this repository after checking out the tested RAGs companion as
 [workflow](.github/workflows/ci.yml).
 
 ```bash
-python -m pip install -e ".[dev,mcp,telemetry,e2e]" -e "../RAGs[mcp]"
+mkdir -p reports/testing
+uv sync --locked --extra dev --extra mcp --extra postgres --extra storage \
+  --extra telemetry --extra e2e
+uv export --locked --extra dev --extra mcp --extra postgres --extra storage \
+  --extra telemetry --extra e2e --no-hashes --no-emit-project --quiet \
+  --output-file reports/testing/agent-constraints.txt
+uv export --project ../RAGs --locked --extra mcp --extra postgres \
+  --no-hashes --no-emit-project --quiet --output-file reports/testing/rags-requirements.txt
+uv pip install --python .venv/bin/python -c reports/testing/agent-constraints.txt \
+  -r reports/testing/rags-requirements.txt -e '../RAGs[mcp,postgres]'
+uv pip check --python .venv/bin/python
 export AGENT_ENV=test RAGS_ENV=test
 
-python -m pytest -q -m unit --require-no-skips \
+uv run --no-sync python -m pytest -q -m unit --require-no-skips \
   --test-inventory reports/testing/inventory-unit.json \
   --junitxml reports/testing/junit-unit.xml \
   --cov=agentic --cov-branch --cov-config=pyproject.toml \
   --cov-report=json:reports/testing/coverage-unit.json
 
-python -m pytest -q -m "integration and not external" --require-no-skips \
+uv run --no-sync python -m pytest -q -m "integration and not external" --require-no-skips \
   --test-inventory reports/testing/inventory-integration.json \
   --junitxml reports/testing/junit-integration.xml \
   --cov=agentic --cov-branch --cov-config=pyproject.toml --cov-append \
@@ -868,10 +952,15 @@ python -m pytest -q -m "integration and not external" --require-no-skips \
   --cov-report=xml:reports/testing/coverage-core.xml \
   --cov-report=html:reports/testing/coverage-html
 
-python scripts/check_coverage.py --report reports/testing/coverage-core.json
-ruff check agentic tests scripts conftest.py --select E4,E7,E9,F
-ruff check agentic --select B,RUF021
+uv run --no-sync python scripts/check_coverage.py --report reports/testing/coverage-core.json
+uv run --no-sync ruff check agentic tests scripts conftest.py --select E4,E7,E9,F
+uv run --no-sync ruff check agentic --select B,RUF021
 ```
+
+The two exports constrain the shared test environment to both repositories' locked
+versions; incompatible companion versions fail installation. `uv run --no-sync`
+retains that environment after the companion is installed. Repeating the exact
+sync removes the companion, so repeat its export/install steps afterward.
 
 These commands combine the two parent-process suites. Independent workers,
 stdio MCP, browser JavaScript and external-service execution have separate
@@ -887,12 +976,12 @@ services with isolated fixture credentials, uses a fixed localhost fault proxy,
 and checks terminal state over HTTP/MCP without editing workflow SQL state.
 
 ```bash
-python tests/e2e_v02.py
-python tests/e2e_v03.py
-python tests/e2e_resilience.py --report reports/testing/resilience-sqlite.json
+uv run --no-sync python tests/e2e_v02.py
+uv run --no-sync python tests/e2e_v03.py
+uv run --no-sync python tests/e2e_resilience.py --report reports/testing/resilience-sqlite.json
 
-python -m playwright install --with-deps chromium
-python tests/e2e_browser.py \
+uv run --no-sync python -m playwright install --with-deps chromium
+uv run --no-sync python tests/e2e_browser.py \
   --report reports/testing/browser.json \
   --artifacts reports/testing/browser-artifacts
 ```
@@ -913,28 +1002,28 @@ workspace prohibits the required UNIX sockets. Inspect the
 [PR checks](https://github.com/MasterLKH180cm/agentic-system/pull/6/checks) for the
 current remote outcome.
 
-For the five actual PostgreSQL/Redis/S3 cases, install `.[postgres,storage]`,
+For the five actual PostgreSQL/Redis/S3 cases, use the locked test environment above,
 provision disposable services, and configure `AGENT_TEST_POSTGRES_URL`,
 `AGENT_TEST_REDIS_URL`, `AGENT_TEST_S3_ENDPOINT` and the fixture AWS credentials
 shown in CI. Then run:
 
 ```bash
-python -m pytest -q -m "integration and external" --require-no-skips \
+uv run --no-sync python -m pytest -q -m "integration and external" --require-no-skips \
   --test-inventory reports/testing/inventory-storage.json \
   --junitxml reports/testing/junit-storage.xml
 
 # Set this to a separately created disposable database for this harness.
 AGENT_E2E_POSTGRES_URL="${AGENT_E2E_POSTGRES_URL:?Set the disposable recovery database URL}" \
-  python tests/e2e_resilience.py --report reports/testing/resilience-postgres.json
+  uv run --no-sync python tests/e2e_resilience.py --report reports/testing/resilience-postgres.json
 ```
 
 For a fresh disposable pair with pgvector already enabled, export both
 `AGENT_E2E_POSTGRES_URL` and `RAGS_E2E_POSTGRES_URL`, then run:
 
 ```bash
-python -m pip install -e ".[dev,mcp,postgres,telemetry,e2e]" -e "../RAGs[mcp,postgres]"
-python tests/e2e_postgres_v04.py --report reports/testing/pgvector-http-v04.json
-python tests/e2e_browser.py --report reports/testing/browser-postgres.json \
+# Reuse the locked two-service test environment prepared above.
+uv run --no-sync python tests/e2e_postgres_v04.py --report reports/testing/pgvector-http-v04.json
+uv run --no-sync python tests/e2e_browser.py --report reports/testing/browser-postgres.json \
   --artifacts reports/testing/browser-postgres-artifacts
 ```
 
