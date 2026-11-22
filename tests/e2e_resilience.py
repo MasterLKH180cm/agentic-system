@@ -152,13 +152,15 @@ def main():
     parser.add_argument("--report", required=True)
     args = parser.parse_args()
     started = time.perf_counter()
-    services = Services(postgres=os.getenv("AGENT_E2E_POSTGRES_URL"))
+    services = Services(postgres=os.getenv("AGENT_E2E_POSTGRES_URL"),
+                        rag_postgres=os.getenv("RAGS_E2E_POSTGRES_URL"))
     report = {"schema_version": "agent-resilience-e2e-v1", "status": "failed", "expected_checks": EXPECTED,
               "checks": [], "backend": "postgresql" if services.postgres else "sqlite",
               "real_services": ["rag-http", "agent-http", "independent-worker", "fixed-localhost-fault-proxy", "stdio-mcp"],
               "database_state_modified_by_test": False, "live_paid_provider": False}
     try:
         with services:
+            report["storage"] = {"rag": services.rag_storage, "agent": services.agent_storage}
             run(services, report["checks"])
         require([check["id"] for check in report["checks"]] == EXPECTED, "An expected resilience check did not execute")
         report["status"] = "passed"

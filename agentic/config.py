@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 
+from agentic.features import Features
+
 
 def secret(name: str) -> str:
     value = os.getenv(name, "")
@@ -29,7 +31,9 @@ class ModelRoute:
     output_cost_per_million: float | None = None
 
 
-def model_routes(provider: str, openai_key: str, anthropic_key: str) -> tuple[ModelRoute, ...]:
+def model_routes(
+    provider: str, openai_key: str, anthropic_key: str, *, require_credentials: bool = True,
+) -> tuple[ModelRoute, ...]:
     raw = os.getenv("AGENT_MODEL_ROUTES_JSON")
     if raw:
         entries = json.loads(raw)
@@ -60,10 +64,10 @@ def model_routes(provider: str, openai_key: str, anthropic_key: str) -> tuple[Mo
         parsed = urlparse(base)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
             raise ValueError("Invalid model route endpoint")
-        key = secret(entry["api_key_env"]) if entry.get("api_key_env") else (
+        key = secret(entry["api_key_env"]) if require_credentials and entry.get("api_key_env") else (
             openai_key if kind == "openai" else anthropic_key
         )
-        if not key:
+        if require_credentials and not key:
             raise ValueError("Configured model route requires an API key")
         prices = [entry.get("input_cost_per_million"), entry.get("output_cost_per_million")]
         if any(p is not None and (type(p) not in (float, int) or not 0 <= p <= 1_000_000 or not math.isfinite(p))
@@ -108,8 +112,11 @@ class Settings:
     rag_admission_policy: str = "compatibility"
     rag_admission_profile_ids: tuple[str, ...] = ()
     rag_timeout_seconds: float = 180
+    features: Features = field(default_factory=Features)
 
     def __post_init__(self):
+        if not isinstance(self.features, Features):
+            raise ValueError("Settings features must be validated operator permissions")
         if (type(self.rag_timeout_seconds) not in (int, float)
                 or not math.isfinite(self.rag_timeout_seconds) or not 1 <= self.rag_timeout_seconds <= 360):
             raise ValueError("AGENT_RAG_TIMEOUT_SECONDS must be finite and within 1..360")
@@ -126,6 +133,7 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
+        features = Features.from_env()
         env = os.getenv("AGENT_ENV", "production").lower()
         try:
             keys = json.loads(os.getenv("AGENT_KEYS_JSON", "{}"))
@@ -182,8 +190,9 @@ class Settings:
             and 1 <= token_limit <= 200000 and 1 <= queued <= 10000
         ):
             raise ValueError("Invalid execution limits")
-        openai_key, anthropic_key = secret("OPENAI_API_KEY"), secret("ANTHROPIC_API_KEY")
-        routes = model_routes(provider, openai_key, anthropic_key)
+        online_allowed = features.enabled("model_generation")
+        openai_key, anthropic_key = (secret("OPENAI_API_KEY"), secret("ANTHROPIC_API_KEY")) if online_allowed else ("", "")
+        routes = model_routes(provider, openai_key, anthropic_key, require_credentials=online_allowed)
         policies = json.loads(os.getenv("AGENT_TENANT_POLICIES_JSON", "{}"))
         if not isinstance(policies, dict) or any(not isinstance(v, dict) for v in policies.values()):
             raise ValueError("AGENT_TENANT_POLICIES_JSON must map tenants to policy settings")
@@ -209,4 +218,5 @@ class Settings:
             rag_admission_policy=os.getenv("AGENT_RAG_ADMISSION_POLICY", "compatibility"),
             rag_admission_profile_ids=tuple(profiles),
             rag_timeout_seconds=float(os.getenv("AGENT_RAG_TIMEOUT_SECONDS", "180")),
+            features=features,
         )

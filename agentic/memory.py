@@ -2,6 +2,7 @@
 import re
 
 from agentic.schemas import MemoryIn, NAME_PATTERN
+from agentic.features import Features
 from agentic.store import Store
 
 
@@ -13,8 +14,9 @@ def terms(text: str) -> set[str]:
 
 
 class Memory:
-    def __init__(self, store: Store):
+    def __init__(self, store: Store, features: Features | None = None):
         self.store = store
+        self.features = features if features is not None else Features.from_env()
 
     @staticmethod
     def validate(namespace: str, record_id: str | None = None) -> None:
@@ -24,10 +26,12 @@ class Memory:
             raise ValueError("Invalid memory namespace or ID")
 
     def put(self, tenant: str, namespace: str, record_id: str, record: MemoryIn) -> dict:
+        self.features.require("memory")
         self.validate(namespace, record_id)
         return self.store.put_memory(tenant, namespace, record_id, record)
 
     def search(self, tenant: str, namespace: str, query: str, limit: int = 5) -> list[dict]:
+        self.features.require("memory")
         self.validate(namespace)
         if len(query) > 2000 or not 1 <= limit <= 10:
             raise ValueError("Invalid memory query bounds")

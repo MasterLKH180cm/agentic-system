@@ -37,7 +37,7 @@ async def plan(
             # relabel keyword refinement as model-generated RAG-Fusion.
             steps[0].args["mode"] = "hybrid"
         if specification is not None:
-            ControlPlane.validate_steps(steps, specification, loop=loop)
+            ControlPlane.validate_steps(steps, specification, loop=loop, features=model.config.features)
         return steps
     allowed = set((specification or {}).get("allowed_tools", READ_ONLY_TOOLS | {"artifact.publish"}))
     allowed.discard("agent.run")
@@ -64,7 +64,8 @@ async def plan(
         data = WorkflowIn(goal=goal, steps=[Step.model_validate(s) for s in parsed["steps"]])
         assert data.steps is not None
         if specification is not None:
-            ControlPlane.validate_steps(data.steps, specification, loop=loop)
+            ControlPlane.validate_steps(data.steps, specification, loop=loop, features=model.config.features,
+                                        online=True)
         return data.steps
     except (ValueError, TypeError, KeyError) as exc:
         raise ValueError("Planner returned invalid or unsafe workflow JSON") from exc

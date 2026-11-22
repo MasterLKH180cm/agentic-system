@@ -159,8 +159,8 @@ class FaultProxy:
 
 
 class Services:
-    def __init__(self, *, step_timeout=7, postgres=None):
-        self.step_timeout, self.postgres = step_timeout, postgres
+    def __init__(self, *, step_timeout=7, postgres=None, rag_postgres=None):
+        self.step_timeout, self.postgres, self.rag_postgres = step_timeout, postgres, rag_postgres
         self.children = []
         self.diagnostics = {}
         self.proxy = None
@@ -208,6 +208,8 @@ class Services:
             })
             if self.postgres:
                 self.env["AGENT_DATABASE_URL"] = self.postgres
+            if self.rag_postgres:
+                self.env["RAGS_DATABASE_URL"] = self.rag_postgres
             self.client = self.stack.enter_context(httpx.Client(timeout=15, trust_env=False))
             rag = self.start("rag", [sys.executable, "-m", "uvicorn", "rags.api:app", "--host", "127.0.0.1",
                                      "--port", self.rag_url.rsplit(":", 1)[1]])
@@ -217,6 +219,14 @@ class Services:
             api = self.start("api", [sys.executable, "-m", "uvicorn", "agentic.api:app", "--host", "127.0.0.1",
                                      "--port", self.agent_url.rsplit(":", 1)[1]])
             self.ready(self.agent_url, api)
+            self.rag_storage = self.request("GET", "/health", rag=True)["storage"]
+            self.agent_storage = self.request("GET", "/capabilities")["storage"]
+            require(self.rag_storage["backend"] == ("postgresql" if self.rag_postgres else "sqlite"),
+                    "RAG storage did not match the explicitly selected backend")
+            require(self.agent_storage["backend"] == ("postgresql" if self.postgres else "sqlite"),
+                    "Agent storage did not match the explicitly selected backend")
+            if self.rag_postgres:
+                require(self.rag_storage["vector_search"] == "pgvector_exact", "RAG is not using pgvector SQL")
             self.worker = self.start_worker("worker-1")
             self.request("POST", "/documents", rag=True, expected=201, data={
                 "document_id": "session-policy", "title": "Session policy", "text": SOURCE,

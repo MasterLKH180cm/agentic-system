@@ -102,8 +102,16 @@ class AgentRuntime:
 
     async def run(self, job: dict) -> dict:
         specification = job["specification"]
+        snapshot = specification.get("feature_flags")
+        features = self.tools.config.features
+        features.require("agent_loop", snapshot)
         policy, profiles = self.tools.evidence_policy(job)
         state = copy.deepcopy(job.get("checkpoint") or {})
+        if state.get("memory", {}).get("citations"):
+            features.require("memory", snapshot)
+        if state.get("plan"):
+            ControlPlane.validate_steps([Step.model_validate(step) for step in state["plan"]], specification,
+                                        loop=True, features=features, online=self.tools.config.provider != "offline")
         if state and state.get("version", 1) < CONTRACT_VERSION:
             state.update(version=CONTRACT_VERSION, evaluation=None)
             # Reassess existing observations without replaying their tool calls.
@@ -115,6 +123,7 @@ class AgentRuntime:
             namespace = specification.get("memory_namespace", "default")
             memories = []
             if "memory.search" in specification.get("allowed_tools", []):
+                features.require("memory", snapshot)
                 memories = self.tools.memory.search(job["tenant"], namespace, job["goal"], 5)
             state = {"version": CONTRACT_VERSION, "round": 1, "plan": None, "cursor": 0, "observations": {},
                      "evaluations": [], "evaluation": None, "memory": self.tools.memory_evidence(memories)}
@@ -127,11 +136,13 @@ class AgentRuntime:
                     run_id=job["run_id"], round_number=state["round"], feedback=feedback,
                     memory=[state["memory"]] if state["memory"]["citations"] else [], loop=True,
                 )
-                ControlPlane.validate_steps(steps, specification, loop=True)
+                ControlPlane.validate_steps(steps, specification, loop=True, features=features,
+                                            online=self.tools.config.provider != "offline")
                 state["plan"] = [step.model_dump() for step in steps]
                 self.save(job, state, "round_planned", {"round": state["round"], "steps": len(steps)})
             steps = [Step.model_validate(s) for s in state["plan"]]
-            ControlPlane.validate_steps(steps, specification, loop=True)
+            ControlPlane.validate_steps(steps, specification, loop=True, features=features,
+                                        online=self.tools.config.provider != "offline")
             while len(state["observations"]) < len(steps):
                 step = next((s for s in steps if s.id not in state["observations"]
                              and all(dep in state["observations"] for dep in s.depends_on)), None)

@@ -7,9 +7,13 @@ import re
 import tempfile
 from urllib.parse import urlparse
 
+from agentic.features import Features
+
 
 class ArtifactStore:
-    def __init__(self):
+    def __init__(self, features: Features | None = None):
+        self.features = features if features is not None else Features.from_env()
+        self.features.require("artifacts")
         self.backend = os.getenv("AGENT_ARTIFACT_BACKEND", "local")
         if self.backend not in {"local", "s3"}:
             raise ValueError("Unknown artifact backend")
