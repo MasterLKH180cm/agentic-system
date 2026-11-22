@@ -134,6 +134,9 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         features = Features.from_env()
+        database_url = os.getenv("AGENT_DATABASE_URL")
+        if database_url and not database_url.startswith(("postgresql://", "postgres://")):
+            raise ValueError("AGENT_DATABASE_URL must select PostgreSQL; use AGENT_DB_PATH for SQLite")
         env = os.getenv("AGENT_ENV", "production").lower()
         try:
             keys = json.loads(os.getenv("AGENT_KEYS_JSON", "{}"))
@@ -200,7 +203,7 @@ class Settings:
         if not isinstance(profiles, list):
             raise ValueError("AGENT_RAG_ADMISSION_PROFILE_IDS_JSON must be an array")
         return cls(
-            db_path=os.getenv("AGENT_DATABASE_URL") or os.getenv("AGENT_DB_PATH", str(Path("data") / "agentic.db")),
+            db_path=database_url or os.getenv("AGENT_DB_PATH", str(Path("data") / "agentic.db")),
             keys=keys,
             rag_url=os.getenv("AGENT_RAG_URL", "http://127.0.0.1:8000").rstrip("/"),
             rag_keys=rag_keys,

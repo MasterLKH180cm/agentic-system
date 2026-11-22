@@ -1,7 +1,9 @@
 # Copy to ~/.codex/config.toml (or trusted project's .codex/config.toml).
 # Export AGENT_URL and AGENT_API_KEY locally; never commit real credentials.
+# Prepare .venv with uv sync --locked --extra mcp, including other selected extras.
+# Replace /ABSOLUTE/PATH/TO/agentic-system with the actual checkout path.
 [mcp_servers.agentic_workflows]
-command = "python"
-args = ["-m", "agentic.mcp_server"]
+command = "uv"
+args = ["run", "--directory", "/ABSOLUTE/PATH/TO/agentic-system", "--no-sync", "python", "-m", "agentic.mcp_server"]
 env_vars = ["AGENT_URL", "AGENT_API_KEY"]
 startup_timeout_sec = 20
