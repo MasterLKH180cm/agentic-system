@@ -1,0 +1,42 @@
+{
+  "schema_version": "frozen-qwen-replay-resources-v1",
+  "started_at": "2026-11-23T12:35:59.141077+00:00",
+  "timeout_seconds": 3600,
+  "module": "rags.verify_admission",
+  "arguments": {
+    "profile": "profiles/admission-qwen-v03.json",
+    "enforce_quality": true,
+    "holdout": "examples/admission_holdout_v03.json",
+    "regression": "examples/eval_v02.json"
+  },
+  "source_sha256": {
+    "rags/verify_admission.py": "284e0f583dc95382e45a4ed88dee87b2b5ba6c8f0910e347109905dcfb40be4d",
+    "rags/evaluate.py": "55f34ef9d56ed9cf35193d8b34e3b17ac53e4828b621ea04fc6cb01add2e6518",
+    "rags/admission_eval.py": "a99abc96bbf74884cb1f77cb31b5f97eeb202e1a01642c5d6a561be5b119c319",
+    "profiles/admission-qwen-v03.json": "b8ed84a9d97f23ab9e49a0b40e8fbbec6b91224e642ef97efb763f71605abf32",
+    "examples/admission_holdout_v03.json": "c0cb3da867ee7c5cb2cfa79db68e9388ed83a02b1a7f01130953b6e9337167e4",
+    "examples/eval_v02.json": "b088a871deea5ca437a59f0931934cc6398d62cef1636893ae3270d3551a7709"
+  },
+  "wrapper_sha256": "907faad5e956ea8cf58ca94d7207783b1d1d9aae2fef34a0c62c6fce3da0b338",
+  "host": {
+    "logical_cpus": 9,
+    "cpu_model": "INTEL(R) XEON(R) PLATINUM 8573C",
+    "memory_total_bytes": 10451423232
+  },
+  "network_mode": "offline_cache_only",
+  "other_model_inference_scheduled": false,
+  "quality_gate_modified": false,
+  "process_exit_code": 2,
+  "finished_at": "2026-11-23T13:07:40.086474+00:00",
+  "wall_seconds": 1900.945504,
+  "child_peak_rss_bytes": 3993993216,
+  "child_user_cpu_seconds": 3726.50568,
+  "child_system_cpu_seconds": 8.823452,
+  "complete_report_written": true,
+  "progress_log_sha256": "9d530ba0e8dd0c537821150076004392078116b0132f47b7889f284a60355f11",
+  "report_sha256": "982452c3b8306bae5230c90e36f194026f573310235673ad1abf34bb60722ad1",
+  "report_exit_status": 2,
+  "correctness_passed": true,
+  "quality_passed": false,
+  "promotion_status": "failed"
+}

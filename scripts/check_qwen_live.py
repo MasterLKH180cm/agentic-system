@@ -191,7 +191,7 @@ def planner_replay(report, directory, endpoint, upstream_key, baseline):
                     reported_usage=gateway.reported_usage,
                     inference_confirmed=(gateway.http_status == 200 and (
                         gateway.reported_usage.get('completion_tokens', 0) > 0
-                        or isinstance(gateway.raw_output, str) and bool(gateway.raw_output))),
+                        or (isinstance(gateway.raw_output, str) and bool(gateway.raw_output)))),
                     output=getattr(gateway, 'output', None),
                     raw_output=getattr(gateway, 'raw_output', None))
         report['planner_replay'].append(item)

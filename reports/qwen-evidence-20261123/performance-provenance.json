@@ -1,0 +1,74 @@
+{
+  "schema_version": "qwen-performance-provenance-v1",
+  "created_at": "2026-11-23T12:43:21.683730+00:00",
+  "helper": {
+    "path": "reports/qwen-evidence-20261123/analyze_performance.py",
+    "sha256": "876561f0b5812ebc02f596271cc4a38ba8fa0d5647aba1b7e904c7ea5cc2271d",
+    "bytes": 20041,
+    "copied_byte_for_byte_from_original": true,
+    "dependencies": "Python standard library only"
+  },
+  "reports": {
+    "derived": {
+      "path": "reports/qwen-performance-analysis-20261123.json",
+      "sha256": "137f4e8de0dde52444134edfed78ffdb7d45558bcaa5993e5c6baf969fb929c7",
+      "bytes": 84744
+    },
+    "direct": {
+      "path": "reports/qwen-live-performance-20261123/direct.json",
+      "sha256": "1be9c235b36ea96a5d9f23efd3690d5ef889461d8460eaea23216f8dc5f4a1ae",
+      "bytes": 60093
+    },
+    "gateway": {
+      "path": "reports/qwen-live-performance-20261123/gateway.json",
+      "sha256": "5f0d294a84189a76cc90595c08ff5f292abaf08d7a8aeb69513f75b1177260bf",
+      "bytes": 60099
+    },
+    "system": {
+      "path": "reports/qwen-live-performance-20261123/system.json",
+      "sha256": "f251bee4aa9c0e270a8ca33e991539bc99fe40e6488925339760f35221f54efa",
+      "bytes": 44165
+    },
+    "deployment": {
+      "path": "reports/qwen-live-performance-20261123/deployment.json",
+      "sha256": "f1c95415207d930ee931578800b9cd8c26278c7ec3f92fa242c9ce5e88b1d4fb",
+      "bytes": 733
+    }
+  },
+  "measured_revisions": {
+    "agentic-system": "9ca69e2afc61294791c450b9d509fa55ff78be2f",
+    "RAGs": "0f72f4569e26528dc0c480baec7ad6320160d1ce"
+  },
+  "measured_source_verification": {
+    "agentic_system_files": 29,
+    "rag_files": 49,
+    "total_files": 78,
+    "commit_blob_sha256_mismatches": 0,
+    "derived_mapping_equals_raw_system_mapping": true,
+    "current_source_mismatches": 0,
+    "method": "Each recorded source SHA-256 was compared with the corresponding immutable Git blob; the system harness is bound separately below."
+  },
+  "system_harness": {
+    "path": "scripts/check_qwen_live.py",
+    "measured_commit": "9ca69e2afc61294791c450b9d509fa55ff78be2f",
+    "measured_sha256": "fd06fa2b5cdbe396a84cbc438d023f9c63514e65dc52ba40a4580f232d6088c2",
+    "post_measurement_sha256": "a9af73b77d9a3b2a9eccef59e651a03faaa759ba4376eb3f87158c8eeac281a3",
+    "ast_equivalent": true,
+    "change_reason": "Ruff RUF021 only: added parentheses around isinstance(gateway.raw_output, str) and bool(gateway.raw_output), the right operand of the existing or expression inside inference_confirmed. Python operator precedence already produced the same expression; ast.dump without source-position attributes is identical. The measured bytes remain those in the measured commit, not the later byte-different formatting edit."
+  },
+  "retained_outcome": {
+    "analysis_status": "complete",
+    "benchmark_gate": "failed",
+    "comparison_permitted": false,
+    "speedup_computed": false
+  },
+  "reproduction": {
+    "working_directory": "agentic-system repository root",
+    "command": "python reports/qwen-evidence-20261123/analyze_performance.py --input-dir reports/qwen-live-performance-20261123 --output /tmp/qwen-performance-reproduction-20261123-01/analysis.json",
+    "output_requirement": "Use a fresh output file for each reproduction; the helper refuses overwriting an existing file. The helper creates missing parent directories. Both input and output are explicit, so original scratch defaults are unused.",
+    "expected_exit_code": 0,
+    "expected_analysis_status": "complete",
+    "expected_benchmark_gate": "failed",
+    "byte_reproduction_note": "The recorded original derived SHA-256 binds the original analysis file. Reproduction generates a new analysis_created_at; raw_reports.*.path also varies when the checkout moves. Compare the preserved raw input hashes and numerical results rather than expecting byte-identical regenerated analysis."
+  }
+}

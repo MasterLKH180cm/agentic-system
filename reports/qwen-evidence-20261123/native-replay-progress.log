@@ -1,0 +1,76 @@
+Scoring frozen holdout; no calibration or selection
+`torch_dtype` is deprecated! Use `dtype` instead!
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:00<00:00,  1.47it/s]Loading checkpoint shards: 100%|██████████| 2/2 [00:00<00:00,  2.92it/s]
+holdout: 4/32
+holdout: 8/32
+holdout: 12/32
+holdout: 16/32
+holdout: 20/32
+holdout: 24/32
+holdout: 28/32
+holdout: 32/32
+generate_false/hybrid: 4/24
+generate_false/hybrid: 8/24
+generate_false/hybrid: 12/24
+generate_false/hybrid: 16/24
+generate_false/hybrid: 20/24
+generate_false/hybrid: 24/24
+generate_false/structured: 4/30
+generate_false/structured: 8/30
+generate_false/structured: 12/30
+generate_false/structured: 16/30
+generate_false/structured: 20/30
+generate_false/structured: 24/30
+generate_false/structured: 28/30
+generate_false/structured: 30/30
+generate_false/temporal: 4/28
+generate_false/temporal: 8/28
+generate_false/temporal: 12/28
+generate_false/temporal: 16/28
+generate_false/temporal: 20/28
+generate_false/temporal: 24/28
+generate_false/temporal: 28/28
+generate_true/hybrid: 4/24
+generate_true/hybrid: 8/24
+generate_true/hybrid: 12/24
+generate_true/hybrid: 16/24
+generate_true/hybrid: 20/24
+generate_true/hybrid: 24/24
+generate_true/structured: 4/30
+generate_true/structured: 8/30
+generate_true/structured: 12/30
+generate_true/structured: 16/30
+generate_true/structured: 20/30
+generate_true/structured: 24/30
+generate_true/structured: 28/30
+generate_true/structured: 30/30
+generate_true/temporal: 4/28
+generate_true/temporal: 8/28
+generate_true/temporal: 12/28
+generate_true/temporal: 16/28
+generate_true/temporal: 20/28
+generate_true/temporal: 24/28
+generate_true/temporal: 28/28
+{
+  "profile_id": "0be2ce8f8c7eee905c58a231576e7f5ddc5c7e94b561cff603f3398dcd5ac8e4",
+  "correctness": {
+    "passed": true,
+    "passed_count": 21,
+    "failed_count": 0,
+    "failures": []
+  },
+  "quality": {
+    "passed": false,
+    "passed_count": 7,
+    "failed_count": 4,
+    "failures": [
+      "holdout_negative_refusal",
+      "holdout_semantic_only",
+      "generate_false_hybrid_admitted_recall_at_3",
+      "generate_true_hybrid_admitted_recall_at_3"
+    ]
+  },
+  "promotion_status": "failed",
+  "enforce_quality": true,
+  "exit_status": 2
+}
