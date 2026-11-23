@@ -1,0 +1,193 @@
+{
+  "schema_version": "qwen-synthesis-probe-v1",
+  "requests": [
+    {
+      "case": "full",
+      "schema": {
+        "type": "object",
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "success"
+              },
+              "answer": {
+                "maxLength": 12000,
+                "title": "Answer",
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\[\\]]+$"
+              },
+              "cited_ids": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 0,
+                "title": "Cited Ids",
+                "type": "array",
+                "uniqueItems": true
+              },
+              "refusal_reason": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "outcome",
+              "answer",
+              "cited_ids",
+              "refusal_reason"
+            ],
+            "title": "SynthesisEnvelope",
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "insufficient_evidence"
+              },
+              "answer": {
+                "maxLength": 12000,
+                "title": "Answer",
+                "type": "string"
+              },
+              "cited_ids": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 0,
+                "title": "Cited Ids",
+                "type": "array",
+                "uniqueItems": true
+              },
+              "refusal_reason": {
+                "type": "string",
+                "const": "model_rejected"
+              }
+            },
+            "required": [
+              "outcome",
+              "answer",
+              "cited_ids",
+              "refusal_reason"
+            ],
+            "title": "SynthesisEnvelope",
+            "type": "object"
+          }
+        ]
+      },
+      "prompt_sha256": "a34fdedc855db2868bbe2ff6e6f4357fbc6df2eb52e8b4faf9f0883839331c05",
+      "http_status": 500,
+      "body": "{\"error\":{\"code\":500,\"message\":\"The model produced output that does not match the expected peg-native format\",\"type\":\"server_error\"}}",
+      "elapsed_seconds": 44.47835055900032
+    },
+    {
+      "case": "success_branch",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "const": "success"
+          },
+          "answer": {
+            "maxLength": 12000,
+            "title": "Answer",
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^\\[\\]]+$"
+          },
+          "cited_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 0,
+            "title": "Cited Ids",
+            "type": "array",
+            "uniqueItems": true
+          },
+          "refusal_reason": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "outcome",
+          "answer",
+          "cited_ids",
+          "refusal_reason"
+        ],
+        "title": "SynthesisEnvelope",
+        "type": "object"
+      },
+      "prompt_sha256": "a34fdedc855db2868bbe2ff6e6f4357fbc6df2eb52e8b4faf9f0883839331c05",
+      "http_status": 500,
+      "body": "{\"error\":{\"code\":500,\"message\":\"The model produced output that does not match the expected peg-native format\",\"type\":\"server_error\"}}",
+      "elapsed_seconds": 34.16572061700026
+    },
+    {
+      "case": "base_envelope",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "enum": [
+              "success",
+              "insufficient_evidence"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "answer": {
+            "maxLength": 12000,
+            "title": "Answer",
+            "type": "string"
+          },
+          "cited_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Cited Ids",
+            "type": "array"
+          },
+          "refusal_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_candidates",
+                  "below_admission_threshold",
+                  "model_rejected",
+                  "context_budget_exhausted"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusal Reason"
+          }
+        },
+        "required": [
+          "outcome",
+          "answer",
+          "cited_ids",
+          "refusal_reason"
+        ],
+        "title": "SynthesisEnvelope",
+        "type": "object"
+      },
+      "prompt_sha256": "a34fdedc855db2868bbe2ff6e6f4357fbc6df2eb52e8b4faf9f0883839331c05",
+      "http_status": 200,
+      "body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"outcome\\\":\\\"success\\\",\\\"answer\\\":\\\"437\\\",\\\"cited_ids\\\":[\\\"source_1\\\"],\\\"refusal_reason\\\":null}\"}}],\"created\":1795435758,\"model\":\"qwen/Qwen3-1.7B\",\"system_fingerprint\":\"b12631-e300919cc\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":26,\"prompt_tokens\":211,\"total_tokens\":237,\"prompt_tokens_details\":{\"cached_tokens\":0}},\"id\":\"chatcmpl-91XtO1NwnCcbSagq0HKga2qYBzfvaV2W\",\"timings\":{\"cache_n\":0,\"prompt_n\":211,\"prompt_ms\":2296.398,\"prompt_per_token_ms\":10.883402843601896,\"prompt_per_second\":91.88302724527716,\"predicted_n\":26,\"predicted_ms\":1414.951,\"predicted_per_token_ms\":56.59804,\"predicted_per_second\":17.66845636350658}}",
+      "elapsed_seconds": 3.7263288909998664
+    }
+  ],
+  "server_error_lines": [
+    "0.47.156.316 W srv    operator(): got exception: {\"error\":{\"code\":500,\"message\":\"The model produced output that does not match the expected peg-native format\",\"type\":\"server_error\"}}",
+    "1.21.321.910 W srv    operator(): got exception: {\"error\":{\"code\":500,\"message\":\"The model produced output that does not match the expected peg-native format\",\"type\":\"server_error\"}}"
+  ]
+}

@@ -14,13 +14,15 @@ implements [LITELLM_SPEC.md](LITELLM_SPEC.md).
 | Agentic planning/synthesis | Explicit OpenAI-compatible route, bounded JSON/text | Workflow state, reservations, lease fencing, cancellation and result validation |
 | Embeddings | Existing separately configured provider | Immutable embedding-space identity and reindex compatibility |
 
-The shipped generation alias is `gateway/inkling-2-mini-iq4nl-v1`, using
+The default generation alias is `gateway/inkling-2-mini-iq4nl-v1`, using
 `max_tokens` with no reasoning-effort override. It maps to the operator's
 `thinkingmachines/Inkling-2-Mini` inference server. The alias is a deployment
 contract, not proof of the loaded weights or tool parser. Retain the exact
 model, runtime and quantization manifest; use a new alias if they change.
 Contextual, hierarchy and graph-derived indexes also depend on generation
 identity, so do not change an existing alias's meaning in place.
+The optional [Qwen deployment](#select-qwen3-17b) has its own immutable alias and
+fresh service credentials; it does not change the default Inkling selection.
 
 Only generation is included. An arbitrary embedding alias, even one with the
 same vector dimensions, cannot replace an existing embedding space. Changing
@@ -116,6 +118,59 @@ certificate valid for that name and an appropriate network binding. Install
 the operator's server certificate/key in the private gateway paths and provide
 the corresponding trust bundle to clients; do not disable TLS verification.
 
+## Select Qwen3-1.7B
+
+The optional Qwen preset connects the official Qwen3-1.7B Q8_0 deployment through
+`gateway/qwen3-1.7b-q8_0-v1`. Its upstream must serve the exact configured name
+`qwen/Qwen3-1.7B`; LiteLLM uses `openai/qwen/Qwen3-1.7B`. See
+[QWEN_GATEWAY_SPEC.md](QWEN_GATEWAY_SPEC.md) and the companion RAG repository's
+`docs/SELF_HOSTED_QWEN_SPEC.md` for the pinned artifact/runtime and CPU recipe.
+
+Run these commands only in a fresh deployment directory containing the sibling
+checkouts, with no existing `data/litellm`. For an existing Inkling installation,
+use a separate checkout/deployment directory, new keys, and a distinct gateway
+database volume. Both bootstrap commands refuse to overwrite existing files.
+Do not reuse Inkling service keys or change the alias inside existing provisioning
+receipts: the initializer rejects that change instead of expanding a key's access.
+
+```bash
+python scripts/bootstrap_compose.py
+python scripts/bootstrap_litellm.py --model qwen
+docker compose -p agentic-qwen \
+  -f compose.yaml -f compose.litellm.yaml -f compose.qwen.yaml \
+  --profile litellm up -d --build --wait
+```
+
+`compose.qwen.yaml` must be the final application overlay. It selects the same
+single Qwen alias for RAG generation, API planning/synthesis, and worker execution.
+The bootstrap supplies that alias to the administrative initializer through
+`LITELLM_MODEL_ALIAS`; applications receive their own restricted keys. Hashing
+embeddings, application authorization, TLS, and zero gateway retry/fallback/cache
+settings retain their existing behavior. The explicit Compose project name gives
+the new gateway its own database volume; the default host port is still 4000,
+so do not run two gateway stacks on that port simultaneously.
+
+Qwen bootstrap writes `QWEN_UPSTREAM_API_BASE` and `QWEN_UPSTREAM_API_KEY` in its
+private `data/litellm/proxy.env`. The inference server must require the generated
+`data/litellm/upstream.key`, or the private proxy configuration must use the
+credential of an independently provisioned server. As with Inkling, a server
+reached through Docker's host bridge needs an explicit reachable binding and
+authentication. The direct loopback Qwen preparation recipe defaults to no auth;
+it must not be exposed to the bridge without an explicitly configured server key.
+
+For a separately deployed gateway, bootstrap the fresh directory with
+`--model qwen`, then use the existing standalone command:
+
+```bash
+docker compose -p agentic-qwen -f deploy/litellm/compose.yaml \
+  --profile litellm up -d --build --wait
+```
+
+The standalone services obtain the chosen model from generated proxy/admin
+configuration; they do not need the application-only `compose.qwen.yaml` overlay.
+Omitting `--model` from bootstrap continues to select Inkling. Only one of the
+standalone or full-stack commands should own a given gateway database and port.
+
 ## Application configuration
 
 The full-stack overlay wires all of these settings automatically. A separately
@@ -179,6 +234,23 @@ synthetic prompt and reasoning markers for accidental publication/logging.
 
 ## Verification and direct/proxy comparison
 
+With the development environment and a Compose binary installed, verify actual
+configuration merging for both model selections without starting containers:
+
+```bash
+.venv/bin/python scripts/check_litellm_compose.py \
+  --report reports/testing/litellm-compose-inkling.json
+.venv/bin/python scripts/check_litellm_compose.py --model qwen \
+  --report reports/testing/litellm-compose-qwen.json
+```
+
+`--compose-binary /absolute/path/to/docker-compose` selects a standalone Compose
+executable. The checker creates disposable private bootstrap files, renders the
+full stack and standalone gateway with the actual CLI, and verifies that proxy,
+initializer, RAG, API and worker agree on one selected alias. It also checks TLS,
+read-only service-key mounts, administrative secret isolation and startup gates.
+It never prints or retains rendered secrets, starts a container, or calls a model.
+
 The isolated process acceptance starts the real pinned LiteLLM executable,
 real PostgreSQL, verified TLS and a deterministic local provider. It tests
 production application adapters, native RAG agent behavior, usage, virtual-key
@@ -241,6 +313,13 @@ decoder-only tokens per second. Operator manifests do not independently attest
 to the served weights. The known execution host cannot hold the selected
 17,627,940,768-byte Inkling artifact plus runtime memory; the integration does
 not change that hardware boundary.
+
+For the actual Qwen deployment, use `qwen-local` and `qwen-litellm` in the same
+benchmark commands and `QWEN_LOCAL_API_KEY_FILE` for an authenticated direct
+baseline. `LITELLM_BENCHMARK_API_KEY_FILE` remains the gateway credential selector.
+Keep the same running upstream process, deployment manifest and workload for both
+paths. The Qwen Q8_0 generation measurements are distinct from the historical
+bfloat16 answerability benchmark; they cannot promote its frozen quality profile.
 
 ## Backup, renewal and rollback
 

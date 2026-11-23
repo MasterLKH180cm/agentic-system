@@ -1,14 +1,157 @@
 """Purpose routing, conservative budget reservation and provider usage accounting."""
 import asyncio
 from contextlib import AsyncExitStack
+import json
 import math
+import re
 
 import httpx
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError, ValidationError
 
 from agentic.config import ModelRoute, Settings, model_ssl_context
 from agentic.async_io import OffloadBusy, run_sync, submit_sync
 from agentic.store import Store
 from agentic.telemetry import span
+
+MAX_SCHEMA_BYTES = 16_384
+MAX_SCHEMA_NODES = 2048
+MAX_SCHEMA_DEPTH = 32
+MAX_SCHEMA_EXPANSION = 8192
+MAX_REQUEST_BYTES = 1_000_000
+SCHEMA_ERROR = "Invalid or oversized structured response schema"
+
+
+def _schema_text_bytes(value: str) -> int:
+    if len(value) > MAX_SCHEMA_BYTES:
+        raise ValueError(SCHEMA_ERROR)
+    try:
+        return len(value.encode("utf-8"))
+    except UnicodeError:
+        raise ValueError(SCHEMA_ERROR) from None
+
+
+def response_format(response_schema: dict | None) -> dict | None:
+    """Snapshot a bounded application-owned schema without resolving remote resources."""
+    if response_schema is None:
+        return None
+    error = SCHEMA_ERROR
+    if type(response_schema) is not dict or response_schema.get("type") != "object":
+        raise ValueError(error)
+    pending = [(response_schema, (), 0)]
+    nodes, edges, references = {}, {}, []
+    text_bytes = 0
+    while pending:
+        value, path, depth = pending.pop()
+        if len(nodes) >= MAX_SCHEMA_NODES or depth > MAX_SCHEMA_DEPTH:
+            raise ValueError(error)
+        nodes[path] = value
+        children = []
+        if type(value) is dict:
+            if len(value) > MAX_SCHEMA_NODES or any(type(key) is not str for key in value):
+                raise ValueError(error)
+            if set(value) & {"$id", "$schema", "$dynamicRef", "$dynamicAnchor", "$recursiveRef", "$recursiveAnchor"}:
+                raise ValueError(error)
+            for key, child in value.items():
+                text_bytes += _schema_text_bytes(key)
+                children.append(path + (key,))
+                pending.append((child, children[-1], depth + 1))
+            if "$ref" in value:
+                reference = value["$ref"]
+                if not isinstance(reference, str):
+                    raise ValueError(error)
+                _schema_text_bytes(reference)
+                if not reference.startswith("#/") or "%" in reference or re.search(r"~(?![01])", reference):
+                    raise ValueError(error)
+                target = tuple(part.replace("~1", "/").replace("~0", "~") for part in reference[2:].split("/"))
+                references.append((path, target))
+        elif type(value) is list:
+            if len(value) > MAX_SCHEMA_NODES:
+                raise ValueError(error)
+            for index, child in enumerate(value):
+                children.append(path + (str(index),))
+                pending.append((child, children[-1], depth + 1))
+        elif type(value) is str:
+            text_bytes += _schema_text_bytes(value)
+        elif value is None or type(value) in (bool, int, float):
+            try:
+                text_bytes += len(json.dumps(value, allow_nan=False))
+            except ValueError:
+                raise ValueError(error) from None
+        else:
+            raise ValueError(error)
+        if text_bytes > MAX_SCHEMA_BYTES:
+            raise ValueError(error)
+        edges[path] = children
+    for source, target in references:
+        if target not in nodes or type(nodes[target]) not in (dict, bool):
+            raise ValueError(error)
+        edges[source].append(target)
+    visiting, sizes, depths = set(), {}, {}
+
+    def bound_expansion(path, depth=0):
+        if path in visiting or depth > MAX_SCHEMA_DEPTH:
+            raise ValueError(error)
+        if path in sizes:
+            return sizes[path], depths[path]
+        visiting.add(path)
+        size, longest = 1, 0
+        for child in edges[path]:
+            child_size, child_depth = bound_expansion(child, depth + 1)
+            size += child_size
+            longest = max(longest, child_depth + 1)
+            if size > MAX_SCHEMA_EXPANSION or longest > MAX_SCHEMA_DEPTH:
+                raise ValueError(error)
+        visiting.remove(path)
+        sizes[path], depths[path] = size, longest
+        return size, longest
+
+    bound_expansion(())
+    encoded = json.dumps(response_schema, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    if len(encoded.encode("utf-8")) > MAX_SCHEMA_BYTES:
+        raise ValueError(error)
+    schema = json.loads(encoded)
+    try:
+        Draft202012Validator.check_schema(schema)
+    except SchemaError:
+        raise ValueError(error) from None
+    return {"type": "json_schema", "json_schema": {"name": "agentic_response", "strict": True, "schema": schema}}
+
+
+def format_units(format_spec: dict | None) -> int:
+    if format_spec is None:
+        return 0
+    return len(json.dumps({"response_format": format_spec}, ensure_ascii=False,
+                          separators=(",", ":"), allow_nan=False).encode("utf-8"))
+
+
+def _unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate JSON response fields")
+        result[key] = value
+    return result
+
+
+def _finite_float(value):
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("Nonfinite JSON response value")
+    return number
+
+
+def _reject_constant(_value):
+    raise ValueError("Nonfinite JSON response value")
+
+
+def validate_structured_text(text: str, format_spec: dict) -> None:
+    try:
+        parsed = json.loads(text, object_pairs_hook=_unique_object, parse_float=_finite_float,
+                            parse_constant=_reject_constant)
+        Draft202012Validator(format_spec["json_schema"]["schema"]).validate(parsed)
+    except (ValueError, ValidationError, RecursionError):
+        raise ValueError("Model returned invalid structured output") from None
 
 
 def estimated_cost(route: ModelRoute, input_tokens: int, output_tokens: int) -> int | None:
@@ -46,16 +189,19 @@ class ModelGateway:
                                     step_timeout_seconds=config.step_timeout_seconds)
 
     @staticmethod
-    def input_units(system: str, message: str) -> int:
+    def input_units(system: str, message: str, *, response_schema: dict | None = None) -> int:
         # Includes system/schema text and conservative chat-message framing.
-        return len(system.encode("utf-8")) + len(message.encode("utf-8")) + 128
+        return (len(system.encode("utf-8")) + len(message.encode("utf-8")) + 128
+                + format_units(response_format(response_schema)))
 
-    def input_capacity(self, system: str, *, tenant: str, run_id: str | None) -> int:
+    def input_capacity(self, system: str, *, tenant: str, run_id: str | None,
+                       response_schema: dict | None = None) -> int:
         if self.config.provider == "offline":
             return 14000
         self.config.features.require("model_generation", self._snapshot(tenant, run_id))
         remaining = self.store.remaining_model_tokens(tenant, run_id, self.config.max_model_tokens)
-        return max(0, min(14000, remaining - self.config.max_model_output_tokens - self.input_units(system, "")))
+        return max(0, min(14000, remaining - self.config.max_model_output_tokens
+                          - self.input_units(system, "", response_schema=response_schema)))
 
     def _snapshot(self, tenant: str, run_id: str | None) -> dict | None:
         run = self.store.get(tenant, run_id) if run_id is not None else None
@@ -77,24 +223,36 @@ class ModelGateway:
         return result if self.config.features.enabled("model_fallback", snapshot) else result[:1]
 
     @staticmethod
-    async def _request(client, route, system, message, output_limit, run_id, telemetry_allowed):
+    def _request_body(route, system, message, output_limit, format_spec):
+        if route.provider == "openai":
+            payload = {"model": route.model, "messages": [
+                {"role": "system", "content": system}, {"role": "user", "content": message},
+            ], route.output_token_parameter or "max_completion_tokens": output_limit}
+            if route.reasoning_effort is not None:
+                payload["reasoning_effort"] = route.reasoning_effort
+            if format_spec is not None:
+                payload["response_format"] = format_spec
+        else:
+            payload = {"model": route.model, "system": system,
+                       "messages": [{"role": "user", "content": message}], "max_tokens": output_limit}
+        body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        if len(body) > MAX_REQUEST_BYTES:
+            raise ValueError("Model request exceeds size limit")
+        return body
+
+    @staticmethod
+    async def _request(client, route, body, run_id, telemetry_allowed):
         with span("model.request", {"run.id": run_id or "unbound", "model.route": route.name,
                                     "model.provider": route.provider}, allowed=telemetry_allowed):
             if route.provider == "openai":
                 path = "/chat/completions"
                 headers = {"Authorization": "Bearer " + route.api_key} if route.auth_mode == "required" else {}
-                payload = {"model": route.model, "messages": [
-                    {"role": "system", "content": system}, {"role": "user", "content": message},
-                ], route.output_token_parameter or "max_completion_tokens": output_limit}
-                if route.reasoning_effort is not None:
-                    payload["reasoning_effort"] = route.reasoning_effort
             else:
                 path = "/messages"
                 headers = {"x-api-key": route.api_key, "anthropic-version": "2023-06-01"}
-                payload = {"model": route.model, "system": system,
-                           "messages": [{"role": "user", "content": message}], "max_tokens": output_limit}
             headers["Accept-Encoding"] = "identity"
-            async with client.stream("POST", route.base_url + path, headers=headers, json=payload) as response:
+            headers["Content-Type"] = "application/json"
+            async with client.stream("POST", route.base_url + path, headers=headers, content=body) as response:
                 response.raise_for_status()
                 if response.headers.get("content-encoding", "identity").lower() != "identity":
                     raise ValueError("Compressed model responses are not accepted")
@@ -108,8 +266,11 @@ class ModelGateway:
     async def complete(
         self, system: str, message: str, *, tenant: str = "local",
         run_id: str | None = None, purpose: str = "synthesis",
+        response_schema: dict | None = None,
     ) -> str | None:
         if self.config.provider == "offline":
+            if response_schema is not None:
+                raise ValueError("Structured output requires a configured model route")
             return None
         clock = asyncio.get_running_loop().time
         deadline = clock() + self.config.model_timeout_seconds
@@ -117,7 +278,8 @@ class ModelGateway:
             raise ValueError("Model input exceeds size limit")
         # UTF-8 bytes plus message overhead intentionally over-reserves compared
         # with typical text tokenizers. Reported usage replaces it when available.
-        estimated_input = self.input_units(system, message)
+        format_spec = response_format(response_schema)
+        estimated_input = self.input_units(system, message) + format_units(format_spec)
         output_limit = self.config.max_model_output_tokens
         # One elapsed budget covers all routes, connection, headers and body.
         # HTTPX's per-read inactivity timeout alone allows endless dribbling.
@@ -125,10 +287,13 @@ class ModelGateway:
             snapshot = await run_sync(self._snapshot, tenant, run_id)
             self.config.features.require("model_generation", snapshot)
             routes = self.routes(purpose, snapshot)
+            if format_spec is not None and any(not route.supports_json_schema for route in routes):
+                raise ValueError("Every selected model route must explicitly support JSON schema output")
             transports = {}
             for index, route in enumerate(routes):
                 if route.auth_mode == "required" and not route.api_key:
                     raise ValueError("Configured model route requires an API key")
+                body = self._request_body(route, system, message, output_limit, format_spec)
                 # Local no-auth traffic must never pass through environment
                 # proxies. Hosted routes retain their existing proxy behavior.
                 trust_environment = route.auth_mode != "none" and route.ca_file is None
@@ -177,7 +342,7 @@ class ModelGateway:
                 try:
                     if clock() >= deadline:
                         raise TimeoutError("Model call deadline elapsed")
-                    response = await self._request(client, route, system, message, output_limit, run_id,
+                    response = await self._request(client, route, body, run_id,
                                                    self.config.features.enabled("telemetry", snapshot))
                     response.raise_for_status()
                     if len(response.content) > 1_000_000:
@@ -197,7 +362,10 @@ class ModelGateway:
                             raise ValueError("Model output was truncated by its token limit")
                         if "finish_reason" in choice and choice["finish_reason"] != "stop":
                             raise ValueError("Model did not finish a text response normally")
-                        text = choice["message"]["content"]
+                        message_data = choice["message"]
+                        if message_data.get("refusal"):
+                            raise ValueError("Model refused the requested response")
+                        text = message_data["content"]
                     else:
                         if data.get("stop_reason") == "max_tokens":
                             raise ValueError("Model output was truncated by its token limit")
@@ -210,6 +378,8 @@ class ModelGateway:
                         raise ValueError("Model text exceeds the response limit")
                     if counts is not None and counts[1] > output_limit:
                         raise ValueError("Model exceeded its configured output token limit")
+                    if format_spec is not None:
+                        validate_structured_text(text, format_spec)
                     if clock() >= deadline:
                         raise TimeoutError("Model call deadline elapsed")
                     return text

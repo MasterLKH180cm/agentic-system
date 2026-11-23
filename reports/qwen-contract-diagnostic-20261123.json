@@ -1,0 +1,174 @@
+{
+  "schema_version": "model-contract-benchmark-v2",
+  "status": "failed",
+  "evidence_kind": "live_model",
+  "created_at": "2026-11-23T12:15:33.780749+00:00",
+  "runtime": {
+    "python": "3.12.14",
+    "implementation": "CPython",
+    "os": "Linux",
+    "machine": "x86_64",
+    "cpu_count": 9,
+    "package_version": "0.9.0",
+    "adapter_sha256": "bb23271e6d14f1fbfe5c6cfa3363faa610696053a1ff3a7dd8e2c5f3bd6d3ec9",
+    "harness_sha256": "6dcd1ff0dd2dc48b329c906e31cf01afa1dbe1a212d8d2b72aad0fe2a6eeb444"
+  },
+  "target": {
+    "model": "qwen/Qwen3-1.7B",
+    "protocol": "openai",
+    "auth_mode": "none",
+    "endpoint_kind": "loopback",
+    "endpoint_sha256": "15d4b7bc578e7d62d5ed32c93d4ea4aa049488cf5a715ec051e8bd3ff2976224"
+  },
+  "deployment_manifest": {
+    "schema_version": "model-deployment-v1",
+    "source": "operator_supplied",
+    "runtime_name": "llama.cpp",
+    "runtime_version": "b12631",
+    "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+    "model_repository": "Qwen/Qwen3-1.7B-GGUF",
+    "model_revision": "90862c4b9d2787eaed51d12237eafdfe7c5f6077",
+    "model_artifact": "Qwen3-1.7B-Q8_0.gguf",
+    "model_sha256": "061b54daade076b5d3362dac252678d17da8c68f07560be70818cace6590cb1a",
+    "model_bytes": 1834426016,
+    "quantization": "Q8_0",
+    "context_tokens": 4096,
+    "server_parallel_slots": 1,
+    "server_threads": 8,
+    "hardware_class": "cpu",
+    "hardware_label": "x86_64",
+    "host_memory_bytes": 10451423232,
+    "accelerator_count": 0,
+    "accelerator_memory_bytes": 0
+  },
+  "deployment_sha256": "8540f6c984d3deccf238345ba50481b1538468fdf3ee112033db244dc956a2c7",
+  "measurement": {
+    "dataset_sha256": "6118fcb5dfece02fd0e3b2589320335244198e3dd6bb828228dd327f84af8473",
+    "validation_version": "synthetic-exact-contracts-v1",
+    "adapter_sha256": "bb23271e6d14f1fbfe5c6cfa3363faa610696053a1ff3a7dd8e2c5f3bd6d3ec9",
+    "harness_sha256": "6dcd1ff0dd2dc48b329c906e31cf01afa1dbe1a212d8d2b72aad0fe2a6eeb444",
+    "case_count": 1,
+    "concurrency": [
+      1
+    ],
+    "repetitions": 1,
+    "warmup_rounds": 0,
+    "max_output_tokens": 512,
+    "reasoning_effort": null,
+    "temperature": 0,
+    "request_timeout_seconds": 90,
+    "max_duration_seconds": 900
+  },
+  "measurement_sha256": "e9f3df3bf1ad7dd7ccae8ca89ca4a1c894d20383756548ab1335725a99ef4b06",
+  "block_reason": null,
+  "warmup": {
+    "concurrency": 1,
+    "summary": {
+      "planned": 0,
+      "attempted": 0,
+      "passed": 0,
+      "failed": 0,
+      "not_run": 0,
+      "schema_valid": 0,
+      "wall_seconds": 0.000143399,
+      "successful_latency_sample_count": 0,
+      "p50_ms": null,
+      "p95_ms": null,
+      "percentile_method": "linear_interpolation_at_n_minus_one_times_q",
+      "validated_requests_per_second": 0.0,
+      "output_tokens_per_second": null,
+      "usage_complete": false,
+      "reported_token_totals": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "cached_prompt_tokens": 0,
+        "reasoning_tokens": 0
+      },
+      "usage_report_count": 0,
+      "estimated_total_cost_usd": null,
+      "known_estimated_cost_usd": 0,
+      "small_sample_warning": true
+    },
+    "samples": []
+  },
+  "phases": [
+    {
+      "concurrency": 1,
+      "summary": {
+        "planned": 1,
+        "attempted": 1,
+        "passed": 0,
+        "failed": 1,
+        "not_run": 0,
+        "schema_valid": 1,
+        "wall_seconds": 2.900613697,
+        "successful_latency_sample_count": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "percentile_method": "linear_interpolation_at_n_minus_one_times_q",
+        "validated_requests_per_second": 0.0,
+        "output_tokens_per_second": null,
+        "usage_complete": true,
+        "reported_token_totals": {
+          "prompt_tokens": 125,
+          "completion_tokens": 22,
+          "cached_prompt_tokens": 0,
+          "reasoning_tokens": 0
+        },
+        "usage_report_count": 1,
+        "estimated_total_cost_usd": null,
+        "known_estimated_cost_usd": 0,
+        "small_sample_warning": true
+      },
+      "samples": [
+        {
+          "case_id": "grounded-answer",
+          "kind": "grounded",
+          "repetition": 0,
+          "status": "failed",
+          "schema_valid": true,
+          "behavior_valid": false,
+          "latency_ms": 2899.559771,
+          "failure_code": "behavior_mismatch",
+          "usage": {
+            "prompt_tokens": 125,
+            "completion_tokens": 22,
+            "total_tokens": 147,
+            "cached_prompt_tokens": 0
+          },
+          "estimated_cost_usd": null,
+          "cost_reason": "no_operator_price_schedule"
+        }
+      ]
+    }
+  ],
+  "request_upper_bound": 1,
+  "prices": null,
+  "limitations": [
+    "Small synthetic contract/behavior dataset; not a general model-quality score.",
+    "No retrieval, embedding, database, or complete agent workflow is measured.",
+    "No tools execute; selected read-only calls are validated only.",
+    "Successful latency excludes failed requests; throughput includes phase wall time.",
+    "Completion throughput includes reported reasoning tokens when the provider counts them.",
+    "Model IDs are request labels, not independent verification of served weights.",
+    "No streaming is used, so TTFT and decoder-only tokens/second are not measured.",
+    "Deployment metadata is operator supplied; it does not attest which weights the HTTP server loaded.",
+    "Quantized deployment results do not establish native-checkpoint or hosted-service equivalence.",
+    "Client concurrency above declared server_parallel_slots includes queueing, not parallel decoding.",
+    "Single failed-case diagnostic only; timings are not the final performance measurement."
+  ],
+  "synthetic_raw_replies": [
+    {
+      "content": "{\"answer\": \"14 days\", \"cited_ids\": [], \"abstain\": true}",
+      "tool_calls": [],
+      "finish_reason": "stop",
+      "model": "qwen/Qwen3-1.7B",
+      "usage": {
+        "prompt_tokens": 125,
+        "completion_tokens": 22,
+        "total_tokens": 147,
+        "cached_prompt_tokens": 0
+      }
+    }
+  ]
+}

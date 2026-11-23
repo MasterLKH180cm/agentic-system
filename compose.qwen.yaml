@@ -1,0 +1,14 @@
+# Apply after compose.yaml and compose.litellm.yaml. Bootstrap with --model qwen.
+x-qwen-agent-env: &qwen-agent-env
+  AGENT_MODEL_ROUTES_JSON: '[{"name":"qwen-gateway-v1","provider":"openai","model":"gateway/qwen3-1.7b-q8_0-v1","base_url":"https://litellm:4000/v1","api_key_env":"AGENT_GATEWAY_API_KEY","ca_file":"/app/gateway/ca.pem","auth_mode":"required","output_token_parameter":"max_tokens","supports_json_schema":true,"purposes":["planning","synthesis"]}]'
+
+services:
+  rags:
+    environment:
+      RAGS_GENERATION_MODEL: qwen
+      RAGS_ROUTER_MODELS_JSON: '{"qwen":"gateway/qwen3-1.7b-q8_0-v1"}'
+      RAGS_ROUTER_MODEL_OPTIONS_JSON: '{"qwen":{"protocol":"openai"}}'
+  api:
+    environment: *qwen-agent-env
+  worker:
+    environment: *qwen-agent-env

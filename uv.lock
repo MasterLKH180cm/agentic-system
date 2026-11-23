@@ -15,6 +15,7 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "jsonschema" },
     { name = "pydantic" },
     { name = "pyjwt", extra = ["crypto"] },
     { name = "uvicorn" },
@@ -53,6 +54,7 @@ requires-dist = [
     { name = "boto3", marker = "extra == 'storage'", specifier = ">=1.35,<2" },
     { name = "fastapi", specifier = ">=0.115,<1" },
     { name = "httpx", specifier = ">=0.27,<1" },
+    { name = "jsonschema", specifier = ">=4.26,<5" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.19,<2" },
     { name = "opentelemetry-api", marker = "extra == 'telemetry'", specifier = ">=1.28,<2" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'telemetry'", specifier = ">=1.28,<2" },

@@ -1,0 +1,64 @@
+{
+  "schema_version": "qwen-native-evidence-provenance-v1",
+  "verified_at": "2026-11-23T13:09:25.484957+00:00",
+  "rags_source_commit": "0f72f4569e26528dc0c480baec7ad6320160d1ce",
+  "evidence_files": {
+    "reports/qwen-admission-replay-20261123.json": {
+      "sha256": "982452c3b8306bae5230c90e36f194026f573310235673ad1abf34bb60722ad1",
+      "bytes": 370548
+    },
+    "reports/qwen-admission-replay-20261123-resources.json": {
+      "sha256": "61c42f0389794de8da0ac275f97dde52837cbd4d748f2b4881e7d12f28d7e4b2",
+      "bytes": 1900
+    },
+    "reports/qwen-admission-analysis-20261123.json": {
+      "sha256": "9a96d6786c14b57085d9d618ed53255f833e4b9d2c0f83cdac1e9ea87f8a55d4",
+      "bytes": 49441
+    },
+    "reports/qwen-evidence-20261123/analyze_admission.py": {
+      "sha256": "ef3dd59e120339b8718af34c743afabb8be2d63c13168fadb88306bb4bb24c2d",
+      "bytes": 17274
+    },
+    "reports/qwen-evidence-20261123/replay_operator.py": {
+      "sha256": "907faad5e956ea8cf58ca94d7207783b1d1d9aae2fef34a0c62c6fce3da0b338",
+      "bytes": 5059
+    },
+    "reports/qwen-evidence-20261123/native-replay-progress.log": {
+      "sha256": "9d530ba0e8dd0c537821150076004392078116b0132f47b7889f284a60355f11",
+      "bytes": 2293
+    }
+  },
+  "execution_source_snapshot": {
+    "recorded_by": "reports/qwen-admission-replay-20261123-resources.json",
+    "recorded_file_count": 6,
+    "all_recorded_hashes_match_pinned_commit": true,
+    "scope": "The six paths captured by the operator before launching the replay; not a full-process attestation."
+  },
+  "working_tree_observation_after_replay": "RAG production source, frozen profile and both fixtures match the pinned source commit. The analysis separately records its analysis-time source snapshot.",
+  "result": {
+    "complete_report_written": true,
+    "exit_status": 2,
+    "promotion_status": "failed",
+    "correctness_passed": 21,
+    "correctness_total": 21,
+    "quality_passed": 7,
+    "quality_total": 11,
+    "forward_count": 472,
+    "forward_count_kind": "reconstructed_not_instrumented"
+  },
+  "reproduce_analysis_from_agentic_repository_root": [
+    "python",
+    "reports/qwen-evidence-20261123/analyze_admission.py",
+    "--rags-root",
+    "../RAGs",
+    "--report",
+    "reports/qwen-admission-replay-20261123.json",
+    "--output",
+    "/tmp/qwen-admission-reproduction-20261123-01.json"
+  ],
+  "limitations": [
+    "An analysis exit of zero validates the evidence; it does not change model quality or promotion status.",
+    "Analysis timestamps and checkout paths can change regenerated JSON bytes. Compare input hashes, identities, counts and values.",
+    "The earlier 1800-second timeout is a separate incomplete attempt retained in reports/qwen-admission-timeout-20261123.json."
+  ]
+}

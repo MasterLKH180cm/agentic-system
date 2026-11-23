@@ -1,0 +1,1440 @@
+{
+  "schema_version": "qwen-admission-readonly-analysis-v2",
+  "analysis_executed_model_inference": false,
+  "analysis_provenance": {
+    "analyzed_at": "2026-11-23T13:07:49.640628+00:00",
+    "python": "3.12.14",
+    "helper": {
+      "file": "analyze_admission.py",
+      "sha256": "ef3dd59e120339b8718af34c743afabb8be2d63c13168fadb88306bb4bb24c2d"
+    },
+    "rags_source_sha256": {
+      "rags/__init__.py": "eb421d96c421e8977ce6970f51f13d67d7b88da34996f6370bf5bc80408c96c2",
+      "rags/__main__.py": "47bea09506b87026270063771d6660147e220b5a9a0e47a7bec4ddcbc3cfeaf9",
+      "rags/admin.py": "6767120b1695a6004fa9eac97bdd44023c63ec1f769d4106ef750e918d5268ab",
+      "rags/admission.py": "3bbd1906a976ebef13bf6c9e54c837af68b48a88537976fa63d5a0d74a0d380b",
+      "rags/admission_eval.py": "a99abc96bbf74884cb1f77cb31b5f97eeb202e1a01642c5d6a561be5b119c319",
+      "rags/agents/__init__.py": "095d5fc505a5edd2352d70201017f1854cf21f50eb35bb501477902c00d5dbc3",
+      "rags/agents/api.py": "cf2ef18216085a99157af991e7ec57d55eeaee783adb6afe572e90f839f966c9",
+      "rags/agents/config.py": "9bb9e9a15fed199f0a6c6bb9501dfee0aea9128f9e20ddad9d0f9c831a2dc825",
+      "rags/agents/deadline.py": "30b2ac4c50ab68525c4b56a73172226e581bab4ebd616d1b9808ec8ce0ceb671",
+      "rags/agents/engine.py": "c2a6ad46fe748b07ddaae2e4bb56b52b59973c8ad4c06cfca9725b3efcdf5edb",
+      "rags/agents/memory.py": "1cb22295911e4076b4ab38bb122c88c37786ba80b8cef9ad2909687333236a6d",
+      "rags/agents/router.py": "0a85894a2f29136a6c403a9ee80be114ce4e802a000a35e77debcf70b43bad92",
+      "rags/agents/state.py": "cb6583cbe5cb11b175e838e6f3616c4389e66ecf0baef053b1b6e47ed0409eea",
+      "rags/agents/templates.py": "c7e1f6b194e0532c1eb461a39f6063122c303a9b17761235547878100bd6f00f",
+      "rags/agents/workflow.py": "836627aa263fe253762490bfbc2d08277fa98381c5e07cc0428c3a9cd567c646",
+      "rags/answerability.py": "8b0c107bb16be006fbe49c2118be97cc673970882390c23f4c616737b361345e",
+      "rags/api.py": "157b52b69e999de7d00e2faa40a9abdfc16cbbf090835c461b1a2f53f1a4c3a1",
+      "rags/auth.py": "74902025161b3432d293155bb0d2dc5d7b567fb43119a8bc0e7dd44f472a551d",
+      "rags/backends.py": "294d28f4dc330ab7eca6789f6172dd7a5c406f7f80879268d9738b6c177a725a",
+      "rags/benchmark.py": "2940b417b7ede3bdcba17f7e025b4338157386c5f2e019c08436896bd734879e",
+      "rags/chunking.py": "1405478e8c1d5eee68129e4fcc272b6b3a69f9549c05d2e270404799fd830145",
+      "rags/cli.py": "d3e06ca5249be0655206e85d0e2c8f9f2081bb1cb285b98ae1e109a033da10b0",
+      "rags/config.py": "26d5f1ce5e813dea7f8bf4e39e4b7c3386da04745fd97a8a77644c56703abdf2",
+      "rags/evaluate.py": "55f34ef9d56ed9cf35193d8b34e3b17ac53e4828b621ea04fc6cb01add2e6518",
+      "rags/features.py": "9c5f07f6fae2a7615e57e8cae052f0163a1316d847cd477f0ac7074b9ac21ae1",
+      "rags/limits.py": "ee20a69c4c3057e5c2e4b9bb245dd42b1b5ebd597007a5c9b0a46209598059de",
+      "rags/mcp_server.py": "28fd9315513763acf2279fd18c64ac72ec0c22c5cee4128f99ed3fadc5b84a3f",
+      "rags/migrate.py": "127d95de285b00ea2318c718b68d8eac4a53aedbe92e1b47cc1eea1f81a82010",
+      "rags/model_benchmark.py": "6dcd1ff0dd2dc48b329c906e31cf01afa1dbe1a212d8d2b72aad0fe2a6eeb444",
+      "rags/model_profiles.py": "c1977e25a425e7b502848e0c550ba4c04326716326a3f5e730f638d9e2f9ed28",
+      "rags/monitoring.py": "d44e303ae630cf69378b5919d1ebf304a6c01b9bd6e2e25db2dd61ea590bb67b",
+      "rags/multimodal.py": "8b728901107882d3f01d68a3f3310affba7a4ca68063ef88ecfa788c8e5eb982",
+      "rags/native.py": "2cde4f35242120df7c671f48d3da03911ac679fa764add9d8fd1c7937de34e46",
+      "rags/postgres.py": "88012879aff9343250b0b772a47e5b80157629f4bd8c510e0900d5af13dc562b",
+      "rags/provider_transport.py": "6dba79e69ef3f57dceba1753fc6fc85a092d3e5619da5a757f13e57a05568b8d",
+      "rags/providers.py": "40e26876b1cc6e769bb1cf14da8fbd2eee88c755c6306b89e5870e2185f9ff25",
+      "rags/registry.py": "125ba7209a2b503be7b1253e1b5c3c2d474133132eccf4034b212be76ca41418",
+      "rags/research/__init__.py": "7166dd4d357e8625fdfdb5ac49b7a030993de3b791ad1b87ba920ba0fbf927fc",
+      "rags/research/common.py": "d63cba81438cf528fb08eb0bd04322324c33194d9ba219b1cd8dffa81abf7eb3",
+      "rags/research/lightrag_adapter.py": "f21835b3c20ab57dc8743a1259def4ca14172ceadd921d34835a86bdf17dfec9",
+      "rags/research/raptor_adapter.py": "e5b4dd013a35dfacc2e24c595fdbf7bfa679d758bb30087cfaac3557062e1420",
+      "rags/research_protocol.py": "5d8eba40e4d1cc371827d75c62e60ccbb48c36895aa11f40a3c50df749c5b870",
+      "rags/research_service.py": "abccffa7ed744893b14b9eb200c0be70a47cad4568b92fd2162ceb6ae3cb3c1a",
+      "rags/research_worker.py": "63c74da9d8d42a9e83852b39332b3b8c6dc8cb272b280996df0ccfb8a3ece85d",
+      "rags/retrieval.py": "20ee6f0b9505ccf90ebbce857033f1738271cac71445dc7353d35397356d1bc9",
+      "rags/storage.py": "9b8a832eddc9f8d0260093f5271f6909659bfd24353a4b344fb8411b01cff764",
+      "rags/tokenization.py": "7160b9a3533f4e6b7d03356e62dcd1c28dd2904a1584b617378c705bd8eddb24",
+      "rags/verify_admission.py": "284e0f583dc95382e45a4ed88dee87b2b5ba6c8f0910e347109905dcfb40be4d",
+      "rags/vision.py": "7bbac95a663a409fd5f897b0d452e4bb67217ca320268089b163df1a2c7c0f1f"
+    },
+    "source_hash_scope": "Snapshot at analysis time; not retroactive attestation of the native execution"
+  },
+  "report_measured_at": "2026-11-23T13:07:37.529975+00:00",
+  "inputs": {
+    "report": {
+      "path": "/workspace/scratch/7113f13a25c9/agentic-system/reports/qwen-admission-replay-20261123.json",
+      "sha256": "982452c3b8306bae5230c90e36f194026f573310235673ad1abf34bb60722ad1"
+    },
+    "profile": {
+      "path": "/workspace/scratch/7113f13a25c9/RAGs/profiles/admission-qwen-v03.json",
+      "sha256": "b8ed84a9d97f23ab9e49a0b40e8fbbec6b91224e642ef97efb763f71605abf32"
+    },
+    "holdout_dataset": {
+      "path": "/workspace/scratch/7113f13a25c9/RAGs/examples/admission_holdout_v03.json",
+      "sha256": "c0cb3da867ee7c5cb2cfa79db68e9388ed83a02b1a7f01130953b6e9337167e4"
+    },
+    "regression_dataset": {
+      "path": "/workspace/scratch/7113f13a25c9/RAGs/examples/eval_v02.json",
+      "sha256": "b088a871deea5ca437a59f0931934cc6398d62cef1636893ae3270d3551a7709"
+    }
+  },
+  "profile": {
+    "profile_id": "0be2ce8f8c7eee905c58a231576e7f5ddc5c7e94b561cff603f3398dcd5ac8e4",
+    "threshold": 10.75,
+    "model": "Qwen/Qwen3-1.7B",
+    "revision": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+    "runtime": {
+      "torch": "2.15.0+cpu",
+      "transformers": "4.57.6",
+      "tokenizers": "0.22.2",
+      "safetensors": "0.8.0",
+      "huggingface_hub": "0.36.2",
+      "python": "3.12",
+      "device": "cpu",
+      "dtype": "bfloat16",
+      "intraop_threads": 2,
+      "interop_threads": 2,
+      "attention_implementation": "eager"
+    },
+    "aggregation": "max_original_passage",
+    "score_convention": "float32_next_token_logit_YES_minus_NO_from_bfloat16_forward"
+  },
+  "correctness": {
+    "passed": true,
+    "passed_count": 21,
+    "total_count": 21,
+    "failed_gates": []
+  },
+  "quality": {
+    "passed": false,
+    "passed_count": 7,
+    "total_count": 11,
+    "failed_gates": [
+      {
+        "name": "holdout_negative_refusal",
+        "actual": 9,
+        "required": "at least 13 of 16",
+        "passed": false
+      },
+      {
+        "name": "holdout_semantic_only",
+        "actual": 7,
+        "required": 8,
+        "passed": false
+      },
+      {
+        "name": "generate_false_hybrid_admitted_recall_at_3",
+        "actual": 0.7,
+        "required": "at least 0.85",
+        "passed": false
+      },
+      {
+        "name": "generate_true_hybrid_admitted_recall_at_3",
+        "actual": 0.7,
+        "required": "at least 0.85",
+        "passed": false
+      }
+    ]
+  },
+  "enforce_quality": true,
+  "promotion_status": "failed",
+  "exit_status": 2,
+  "recorded_elapsed_seconds": 1897.829,
+  "forward_count": {
+    "kind": "reconstructed_not_instrumented",
+    "method": "One batch-size-1 forward per scored passage; candidate_count counts chunks, not unique document IDs",
+    "holdout": 32,
+    "regression": [
+      {
+        "generation": "generate_false",
+        "mode": "hybrid",
+        "queries": 24,
+        "scored_queries": 24,
+        "forward_count": 72,
+        "basis_counts": {
+          "calibrated_answerability": 24
+        },
+        "scored_candidate_count_histogram": {
+          "3": 24
+        }
+      },
+      {
+        "generation": "generate_false",
+        "mode": "structured",
+        "queries": 30,
+        "scored_queries": 24,
+        "forward_count": 72,
+        "basis_counts": {
+          "calibrated_answerability": 24,
+          "structured_exact": 6
+        },
+        "scored_candidate_count_histogram": {
+          "3": 24
+        }
+      },
+      {
+        "generation": "generate_false",
+        "mode": "temporal",
+        "queries": 28,
+        "scored_queries": 28,
+        "forward_count": 76,
+        "basis_counts": {
+          "calibrated_answerability": 28
+        },
+        "scored_candidate_count_histogram": {
+          "3": 24,
+          "1": 4
+        }
+      },
+      {
+        "generation": "generate_true",
+        "mode": "hybrid",
+        "queries": 24,
+        "scored_queries": 24,
+        "forward_count": 72,
+        "basis_counts": {
+          "calibrated_answerability": 24
+        },
+        "scored_candidate_count_histogram": {
+          "3": 24
+        }
+      },
+      {
+        "generation": "generate_true",
+        "mode": "structured",
+        "queries": 30,
+        "scored_queries": 24,
+        "forward_count": 72,
+        "basis_counts": {
+          "calibrated_answerability": 24,
+          "structured_exact": 6
+        },
+        "scored_candidate_count_histogram": {
+          "3": 24
+        }
+      },
+      {
+        "generation": "generate_true",
+        "mode": "temporal",
+        "queries": 28,
+        "scored_queries": 28,
+        "forward_count": 76,
+        "basis_counts": {
+          "calibrated_answerability": 28
+        },
+        "scored_candidate_count_histogram": {
+          "3": 24,
+          "1": 4
+        }
+      }
+    ],
+    "derived_total": 472,
+    "exact_from_observed_scoring_metadata": true,
+    "ambiguous_cases": []
+  },
+  "holdout_metrics": {
+    "cases": 32,
+    "positive": 16,
+    "negative": 16,
+    "positive_retained": 15,
+    "negative_refused": 9,
+    "false_refusals": 1,
+    "positive_retention": 0.9375,
+    "refusal_recall": 0.5625,
+    "refusal_precision": 0.9,
+    "false_refusal_rate": 0.0625,
+    "abstentions": 10,
+    "abstention_rate": 0.3125,
+    "semantic_only_positive": 8,
+    "semantic_only_retained": 7
+  },
+  "holdout_incorrect_predictions": [
+    {
+      "id": "hold-en-aquarium-negative-missing-field",
+      "answerable": false,
+      "category": "missing_field",
+      "score": 16.75,
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        160
+      ]
+    },
+    {
+      "id": "hold-en-aquarium-negative-wrong-entity",
+      "answerable": false,
+      "category": "wrong_entity",
+      "score": 21.5,
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        160
+      ]
+    },
+    {
+      "id": "hold-en-dig-negative-missing-field",
+      "answerable": false,
+      "category": "missing_field",
+      "score": 13.75,
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        159
+      ]
+    },
+    {
+      "id": "hold-en-film-positive-semantic-only",
+      "answerable": true,
+      "category": "semantic_only",
+      "score": -3.0,
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        161
+      ]
+    },
+    {
+      "id": "hold-zh-radio-negative-missing-field",
+      "answerable": false,
+      "category": "missing_field",
+      "score": 12.0,
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        175
+      ]
+    },
+    {
+      "id": "hold-zh-radio-negative-wrong-entity",
+      "answerable": false,
+      "category": "wrong_entity",
+      "score": 16.25,
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        172
+      ]
+    },
+    {
+      "id": "hold-zh-choir-negative-missing-field",
+      "answerable": false,
+      "category": "missing_field",
+      "score": 17.0,
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        171
+      ]
+    },
+    {
+      "id": "hold-zh-games-negative-wrong-entity",
+      "answerable": false,
+      "category": "wrong_entity",
+      "score": 15.25,
+      "truncated_passages": 0,
+      "original_pair_tokens": [
+        166
+      ]
+    }
+  ],
+  "regression": {
+    "generate_false": {
+      "hybrid": {
+        "diagnostic_origin": "recorded_and_recomputed_identical",
+        "recorded_case_diagnostics": 24,
+        "reference_diagnostics": {
+          "scope": "document_id_coverage_only",
+          "cases": 24,
+          "raw_reference_coverage": {
+            "not_applicable": 4,
+            "none": 3,
+            "partial": 0,
+            "complete": 17
+          },
+          "answerable_refusals_by_raw_reference_coverage": {
+            "not_applicable": 0,
+            "none": 2,
+            "partial": 0,
+            "complete": 3
+          },
+          "reference_removals": {
+            "cases": 3,
+            "document_occurrences": 5,
+            "by_cause": {
+              "admission_refusal": {
+                "cases": 3,
+                "document_occurrences": 5
+              },
+              "context_budget": {
+                "cases": 0,
+                "document_occurrences": 0
+              },
+              "unattributed": {
+                "cases": 0,
+                "document_occurrences": 0
+              }
+            }
+          }
+        },
+        "raw_recall_at_k": 0.85,
+        "admitted_recall_at_k": 0.7,
+        "false_refusals": 5,
+        "true_refusals": 4,
+        "raw_reference_miss_ids": [
+          "semantic-01",
+          "semantic-03",
+          "semantic-06"
+        ],
+        "partial_reference_ids": [],
+        "diagnostic_cases": [
+          {
+            "id": "semantic-01",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "success",
+            "refusal_reason": null,
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "sessions"
+              ],
+              "raw_reference_document_ids": [],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [
+                "sessions"
+              ],
+              "removed_reference_document_ids": [],
+              "raw_reference_coverage": "none",
+              "reference_removal_cause": null
+            }
+          },
+          {
+            "id": "semantic-03",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "billing"
+              ],
+              "raw_reference_document_ids": [],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [
+                "billing"
+              ],
+              "removed_reference_document_ids": [],
+              "raw_reference_coverage": "none",
+              "reference_removal_cause": null
+            }
+          },
+          {
+            "id": "semantic-05",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "recovery"
+              ],
+              "raw_reference_document_ids": [
+                "recovery"
+              ],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [],
+              "removed_reference_document_ids": [
+                "recovery"
+              ],
+              "raw_reference_coverage": "complete",
+              "reference_removal_cause": "admission_refusal"
+            }
+          },
+          {
+            "id": "semantic-06",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "zh_policy"
+              ],
+              "raw_reference_document_ids": [],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [
+                "zh_policy"
+              ],
+              "removed_reference_document_ids": [],
+              "raw_reference_coverage": "none",
+              "reference_removal_cause": null
+            }
+          },
+          {
+            "id": "multi_hop-01",
+            "category": "multi_hop",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "cache",
+                "sessions"
+              ],
+              "raw_reference_document_ids": [
+                "cache",
+                "sessions"
+              ],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [],
+              "removed_reference_document_ids": [
+                "cache",
+                "sessions"
+              ],
+              "raw_reference_coverage": "complete",
+              "reference_removal_cause": "admission_refusal"
+            }
+          },
+          {
+            "id": "multi_hop-02",
+            "category": "multi_hop",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "audit",
+                "backups"
+              ],
+              "raw_reference_document_ids": [
+                "audit",
+                "backups"
+              ],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [],
+              "removed_reference_document_ids": [
+                "audit",
+                "backups"
+              ],
+              "raw_reference_coverage": "complete",
+              "reference_removal_cause": "admission_refusal"
+            }
+          }
+        ]
+      },
+      "structured": {
+        "diagnostic_origin": "recorded_and_recomputed_identical",
+        "recorded_case_diagnostics": 30,
+        "reference_diagnostics": {
+          "scope": "document_id_coverage_only",
+          "cases": 30,
+          "raw_reference_coverage": {
+            "not_applicable": 4,
+            "none": 3,
+            "partial": 0,
+            "complete": 23
+          },
+          "answerable_refusals_by_raw_reference_coverage": {
+            "not_applicable": 0,
+            "none": 2,
+            "partial": 0,
+            "complete": 3
+          },
+          "reference_removals": {
+            "cases": 3,
+            "document_occurrences": 5,
+            "by_cause": {
+              "admission_refusal": {
+                "cases": 3,
+                "document_occurrences": 5
+              },
+              "context_budget": {
+                "cases": 0,
+                "document_occurrences": 0
+              },
+              "unattributed": {
+                "cases": 0,
+                "document_occurrences": 0
+              }
+            }
+          }
+        },
+        "raw_recall_at_k": 0.8846,
+        "admitted_recall_at_k": 0.7692,
+        "false_refusals": 5,
+        "true_refusals": 4,
+        "raw_reference_miss_ids": [
+          "semantic-01",
+          "semantic-03",
+          "semantic-06"
+        ],
+        "partial_reference_ids": [],
+        "diagnostic_cases": [
+          {
+            "id": "semantic-01",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "success",
+            "refusal_reason": null,
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "sessions"
+              ],
+              "raw_reference_document_ids": [],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [
+                "sessions"
+              ],
+              "removed_reference_document_ids": [],
+              "raw_reference_coverage": "none",
+              "reference_removal_cause": null
+            }
+          },
+          {
+            "id": "semantic-03",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "billing"
+              ],
+              "raw_reference_document_ids": [],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [
+                "billing"
+              ],
+              "removed_reference_document_ids": [],
+              "raw_reference_coverage": "none",
+              "reference_removal_cause": null
+            }
+          },
+          {
+            "id": "semantic-05",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "recovery"
+              ],
+              "raw_reference_document_ids": [
+                "recovery"
+              ],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [],
+              "removed_reference_document_ids": [
+                "recovery"
+              ],
+              "raw_reference_coverage": "complete",
+              "reference_removal_cause": "admission_refusal"
+            }
+          },
+          {
+            "id": "semantic-06",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "zh_policy"
+              ],
+              "raw_reference_document_ids": [],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [
+                "zh_policy"
+              ],
+              "removed_reference_document_ids": [],
+              "raw_reference_coverage": "none",
+              "reference_removal_cause": null
+            }
+          },
+          {
+            "id": "multi_hop-01",
+            "category": "multi_hop",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "cache",
+                "sessions"
+              ],
+              "raw_reference_document_ids": [
+                "cache",
+                "sessions"
+              ],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [],
+              "removed_reference_document_ids": [
+                "cache",
+                "sessions"
+              ],
+              "raw_reference_coverage": "complete",
+              "reference_removal_cause": "admission_refusal"
+            }
+          },
+          {
+            "id": "multi_hop-02",
+            "category": "multi_hop",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "audit",
+                "backups"
+              ],
+              "raw_reference_document_ids": [
+                "audit",
+                "backups"
+              ],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [],
+              "removed_reference_document_ids": [
+                "audit",
+                "backups"
+              ],
+              "raw_reference_coverage": "complete",
+              "reference_removal_cause": "admission_refusal"
+            }
+          }
+        ]
+      },
+      "temporal": {
+        "diagnostic_origin": "recorded_and_recomputed_identical",
+        "recorded_case_diagnostics": 28,
+        "reference_diagnostics": {
+          "scope": "document_id_coverage_only",
+          "cases": 28,
+          "raw_reference_coverage": {
+            "not_applicable": 4,
+            "none": 3,
+            "partial": 0,
+            "complete": 21
+          },
+          "answerable_refusals_by_raw_reference_coverage": {
+            "not_applicable": 0,
+            "none": 2,
+            "partial": 0,
+            "complete": 3
+          },
+          "reference_removals": {
+            "cases": 3,
+            "document_occurrences": 5,
+            "by_cause": {
+              "admission_refusal": {
+                "cases": 3,
+                "document_occurrences": 5
+              },
+              "context_budget": {
+                "cases": 0,
+                "document_occurrences": 0
+              },
+              "unattributed": {
+                "cases": 0,
+                "document_occurrences": 0
+              }
+            }
+          }
+        },
+        "raw_recall_at_k": 0.875,
+        "admitted_recall_at_k": 0.75,
+        "false_refusals": 5,
+        "true_refusals": 4,
+        "raw_reference_miss_ids": [
+          "semantic-01",
+          "semantic-03",
+          "semantic-06"
+        ],
+        "partial_reference_ids": [],
+        "diagnostic_cases": [
+          {
+            "id": "semantic-01",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "success",
+            "refusal_reason": null,
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "sessions"
+              ],
+              "raw_reference_document_ids": [],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [
+                "sessions"
+              ],
+              "removed_reference_document_ids": [],
+              "raw_reference_coverage": "none",
+              "reference_removal_cause": null
+            }
+          },
+          {
+            "id": "semantic-03",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "billing"
+              ],
+              "raw_reference_document_ids": [],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [
+                "billing"
+              ],
+              "removed_reference_document_ids": [],
+              "raw_reference_coverage": "none",
+              "reference_removal_cause": null
+            }
+          },
+          {
+            "id": "semantic-05",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "recovery"
+              ],
+              "raw_reference_document_ids": [
+                "recovery"
+              ],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [],
+              "removed_reference_document_ids": [
+                "recovery"
+              ],
+              "raw_reference_coverage": "complete",
+              "reference_removal_cause": "admission_refusal"
+            }
+          },
+          {
+            "id": "semantic-06",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "zh_policy"
+              ],
+              "raw_reference_document_ids": [],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [
+                "zh_policy"
+              ],
+              "removed_reference_document_ids": [],
+              "raw_reference_coverage": "none",
+              "reference_removal_cause": null
+            }
+          },
+          {
+            "id": "multi_hop-01",
+            "category": "multi_hop",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "cache",
+                "sessions"
+              ],
+              "raw_reference_document_ids": [
+                "cache",
+                "sessions"
+              ],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [],
+              "removed_reference_document_ids": [
+                "cache",
+                "sessions"
+              ],
+              "raw_reference_coverage": "complete",
+              "reference_removal_cause": "admission_refusal"
+            }
+          },
+          {
+            "id": "multi_hop-02",
+            "category": "multi_hop",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "audit",
+                "backups"
+              ],
+              "raw_reference_document_ids": [
+                "audit",
+                "backups"
+              ],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [],
+              "removed_reference_document_ids": [
+                "audit",
+                "backups"
+              ],
+              "raw_reference_coverage": "complete",
+              "reference_removal_cause": "admission_refusal"
+            }
+          }
+        ]
+      }
+    },
+    "generate_true": {
+      "hybrid": {
+        "diagnostic_origin": "recorded_and_recomputed_identical",
+        "recorded_case_diagnostics": 24,
+        "reference_diagnostics": {
+          "scope": "document_id_coverage_only",
+          "cases": 24,
+          "raw_reference_coverage": {
+            "not_applicable": 4,
+            "none": 3,
+            "partial": 0,
+            "complete": 17
+          },
+          "answerable_refusals_by_raw_reference_coverage": {
+            "not_applicable": 0,
+            "none": 2,
+            "partial": 0,
+            "complete": 3
+          },
+          "reference_removals": {
+            "cases": 3,
+            "document_occurrences": 5,
+            "by_cause": {
+              "admission_refusal": {
+                "cases": 3,
+                "document_occurrences": 5
+              },
+              "context_budget": {
+                "cases": 0,
+                "document_occurrences": 0
+              },
+              "unattributed": {
+                "cases": 0,
+                "document_occurrences": 0
+              }
+            }
+          }
+        },
+        "raw_recall_at_k": 0.85,
+        "admitted_recall_at_k": 0.7,
+        "false_refusals": 5,
+        "true_refusals": 4,
+        "raw_reference_miss_ids": [
+          "semantic-01",
+          "semantic-03",
+          "semantic-06"
+        ],
+        "partial_reference_ids": [],
+        "diagnostic_cases": [
+          {
+            "id": "semantic-01",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "success",
+            "refusal_reason": null,
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "sessions"
+              ],
+              "raw_reference_document_ids": [],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [
+                "sessions"
+              ],
+              "removed_reference_document_ids": [],
+              "raw_reference_coverage": "none",
+              "reference_removal_cause": null
+            }
+          },
+          {
+            "id": "semantic-03",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "billing"
+              ],
+              "raw_reference_document_ids": [],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [
+                "billing"
+              ],
+              "removed_reference_document_ids": [],
+              "raw_reference_coverage": "none",
+              "reference_removal_cause": null
+            }
+          },
+          {
+            "id": "semantic-05",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "recovery"
+              ],
+              "raw_reference_document_ids": [
+                "recovery"
+              ],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [],
+              "removed_reference_document_ids": [
+                "recovery"
+              ],
+              "raw_reference_coverage": "complete",
+              "reference_removal_cause": "admission_refusal"
+            }
+          },
+          {
+            "id": "semantic-06",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "zh_policy"
+              ],
+              "raw_reference_document_ids": [],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [
+                "zh_policy"
+              ],
+              "removed_reference_document_ids": [],
+              "raw_reference_coverage": "none",
+              "reference_removal_cause": null
+            }
+          },
+          {
+            "id": "multi_hop-01",
+            "category": "multi_hop",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "cache",
+                "sessions"
+              ],
+              "raw_reference_document_ids": [
+                "sessions",
+                "cache"
+              ],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [],
+              "removed_reference_document_ids": [
+                "sessions",
+                "cache"
+              ],
+              "raw_reference_coverage": "complete",
+              "reference_removal_cause": "admission_refusal"
+            }
+          },
+          {
+            "id": "multi_hop-02",
+            "category": "multi_hop",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "audit",
+                "backups"
+              ],
+              "raw_reference_document_ids": [
+                "audit",
+                "backups"
+              ],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [],
+              "removed_reference_document_ids": [
+                "audit",
+                "backups"
+              ],
+              "raw_reference_coverage": "complete",
+              "reference_removal_cause": "admission_refusal"
+            }
+          }
+        ]
+      },
+      "structured": {
+        "diagnostic_origin": "recorded_and_recomputed_identical",
+        "recorded_case_diagnostics": 30,
+        "reference_diagnostics": {
+          "scope": "document_id_coverage_only",
+          "cases": 30,
+          "raw_reference_coverage": {
+            "not_applicable": 4,
+            "none": 3,
+            "partial": 0,
+            "complete": 23
+          },
+          "answerable_refusals_by_raw_reference_coverage": {
+            "not_applicable": 0,
+            "none": 2,
+            "partial": 0,
+            "complete": 3
+          },
+          "reference_removals": {
+            "cases": 3,
+            "document_occurrences": 5,
+            "by_cause": {
+              "admission_refusal": {
+                "cases": 3,
+                "document_occurrences": 5
+              },
+              "context_budget": {
+                "cases": 0,
+                "document_occurrences": 0
+              },
+              "unattributed": {
+                "cases": 0,
+                "document_occurrences": 0
+              }
+            }
+          }
+        },
+        "raw_recall_at_k": 0.8846,
+        "admitted_recall_at_k": 0.7692,
+        "false_refusals": 5,
+        "true_refusals": 4,
+        "raw_reference_miss_ids": [
+          "semantic-01",
+          "semantic-03",
+          "semantic-06"
+        ],
+        "partial_reference_ids": [],
+        "diagnostic_cases": [
+          {
+            "id": "semantic-01",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "success",
+            "refusal_reason": null,
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "sessions"
+              ],
+              "raw_reference_document_ids": [],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [
+                "sessions"
+              ],
+              "removed_reference_document_ids": [],
+              "raw_reference_coverage": "none",
+              "reference_removal_cause": null
+            }
+          },
+          {
+            "id": "semantic-03",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "billing"
+              ],
+              "raw_reference_document_ids": [],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [
+                "billing"
+              ],
+              "removed_reference_document_ids": [],
+              "raw_reference_coverage": "none",
+              "reference_removal_cause": null
+            }
+          },
+          {
+            "id": "semantic-05",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "recovery"
+              ],
+              "raw_reference_document_ids": [
+                "recovery"
+              ],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [],
+              "removed_reference_document_ids": [
+                "recovery"
+              ],
+              "raw_reference_coverage": "complete",
+              "reference_removal_cause": "admission_refusal"
+            }
+          },
+          {
+            "id": "semantic-06",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "zh_policy"
+              ],
+              "raw_reference_document_ids": [],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [
+                "zh_policy"
+              ],
+              "removed_reference_document_ids": [],
+              "raw_reference_coverage": "none",
+              "reference_removal_cause": null
+            }
+          },
+          {
+            "id": "multi_hop-01",
+            "category": "multi_hop",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "cache",
+                "sessions"
+              ],
+              "raw_reference_document_ids": [
+                "sessions",
+                "cache"
+              ],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [],
+              "removed_reference_document_ids": [
+                "sessions",
+                "cache"
+              ],
+              "raw_reference_coverage": "complete",
+              "reference_removal_cause": "admission_refusal"
+            }
+          },
+          {
+            "id": "multi_hop-02",
+            "category": "multi_hop",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "audit",
+                "backups"
+              ],
+              "raw_reference_document_ids": [
+                "audit",
+                "backups"
+              ],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [],
+              "removed_reference_document_ids": [
+                "audit",
+                "backups"
+              ],
+              "raw_reference_coverage": "complete",
+              "reference_removal_cause": "admission_refusal"
+            }
+          }
+        ]
+      },
+      "temporal": {
+        "diagnostic_origin": "recorded_and_recomputed_identical",
+        "recorded_case_diagnostics": 28,
+        "reference_diagnostics": {
+          "scope": "document_id_coverage_only",
+          "cases": 28,
+          "raw_reference_coverage": {
+            "not_applicable": 4,
+            "none": 3,
+            "partial": 0,
+            "complete": 21
+          },
+          "answerable_refusals_by_raw_reference_coverage": {
+            "not_applicable": 0,
+            "none": 2,
+            "partial": 0,
+            "complete": 3
+          },
+          "reference_removals": {
+            "cases": 3,
+            "document_occurrences": 5,
+            "by_cause": {
+              "admission_refusal": {
+                "cases": 3,
+                "document_occurrences": 5
+              },
+              "context_budget": {
+                "cases": 0,
+                "document_occurrences": 0
+              },
+              "unattributed": {
+                "cases": 0,
+                "document_occurrences": 0
+              }
+            }
+          }
+        },
+        "raw_recall_at_k": 0.875,
+        "admitted_recall_at_k": 0.75,
+        "false_refusals": 5,
+        "true_refusals": 4,
+        "raw_reference_miss_ids": [
+          "semantic-01",
+          "semantic-03",
+          "semantic-06"
+        ],
+        "partial_reference_ids": [],
+        "diagnostic_cases": [
+          {
+            "id": "semantic-01",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "success",
+            "refusal_reason": null,
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "sessions"
+              ],
+              "raw_reference_document_ids": [],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [
+                "sessions"
+              ],
+              "removed_reference_document_ids": [],
+              "raw_reference_coverage": "none",
+              "reference_removal_cause": null
+            }
+          },
+          {
+            "id": "semantic-03",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "billing"
+              ],
+              "raw_reference_document_ids": [],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [
+                "billing"
+              ],
+              "removed_reference_document_ids": [],
+              "raw_reference_coverage": "none",
+              "reference_removal_cause": null
+            }
+          },
+          {
+            "id": "semantic-05",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "recovery"
+              ],
+              "raw_reference_document_ids": [
+                "recovery"
+              ],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [],
+              "removed_reference_document_ids": [
+                "recovery"
+              ],
+              "raw_reference_coverage": "complete",
+              "reference_removal_cause": "admission_refusal"
+            }
+          },
+          {
+            "id": "semantic-06",
+            "category": "semantic",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "zh_policy"
+              ],
+              "raw_reference_document_ids": [],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [
+                "zh_policy"
+              ],
+              "removed_reference_document_ids": [],
+              "raw_reference_coverage": "none",
+              "reference_removal_cause": null
+            }
+          },
+          {
+            "id": "multi_hop-01",
+            "category": "multi_hop",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "cache",
+                "sessions"
+              ],
+              "raw_reference_document_ids": [
+                "sessions",
+                "cache"
+              ],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [],
+              "removed_reference_document_ids": [
+                "sessions",
+                "cache"
+              ],
+              "raw_reference_coverage": "complete",
+              "reference_removal_cause": "admission_refusal"
+            }
+          },
+          {
+            "id": "multi_hop-02",
+            "category": "multi_hop",
+            "unanswerable": false,
+            "outcome": "insufficient_evidence",
+            "refusal_reason": "below_admission_threshold",
+            "reference_diagnostics": {
+              "reference_document_ids": [
+                "audit",
+                "backups"
+              ],
+              "raw_reference_document_ids": [
+                "audit",
+                "backups"
+              ],
+              "admitted_reference_document_ids": [],
+              "missing_raw_reference_document_ids": [],
+              "removed_reference_document_ids": [
+                "audit",
+                "backups"
+              ],
+              "raw_reference_coverage": "complete",
+              "reference_removal_cause": "admission_refusal"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "limits": [
+    "Document ID coverage does not establish semantic sufficiency or entailment.",
+    "The forward count is reconstructed from complete report metadata and the reviewed scoring implementation, not an instrumented runtime counter.",
+    "generate_true uses the extractive provider; these are not chat decoding speeds or TTFT.",
+    "The historical report binds the holdout digest but does not embed a regression fixture digest; the supplied frozen fixture is separately hashed here.",
+    "Analysis changes no gates, thresholds, profiles, datasets, predictions or original measurements."
+  ]
+}

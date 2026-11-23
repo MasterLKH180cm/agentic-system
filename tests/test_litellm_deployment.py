@@ -176,8 +176,9 @@ class ReplyStream(httpx.AsyncByteStream):
 
 
 class ManagementRegistry:
-    def __init__(self, master, missing_status=404):
+    def __init__(self, master, missing_status=404, model_alias=ALIAS):
         self.master = master
+        self.model_alias = model_alias
         self.missing_status = missing_status
         self.records = {}
         self.generated = []
@@ -204,7 +205,7 @@ class ManagementRegistry:
             assert request.method == "POST"
             body = json.loads(request.content)
             assert "key_type" not in body, "llm_api key_type would expand the narrow route restriction"
-            assert body["models"] == [ALIAS] and set(body["allowed_routes"]) == ROUTES
+            assert body["models"] == [self.model_alias] and set(body["allowed_routes"]) == ROUTES
             digest = hashlib.sha256(body["key"].encode()).hexdigest()
             assert digest not in self.records, "Existing key must never be silently regenerated"
             self.records[digest] = {"models": body["models"], "allowed_routes": body["allowed_routes"],
@@ -221,10 +222,10 @@ class ManagementRegistry:
         return httpx.Response(status, request=request, stream=ReplyStream(payload))
 
 
-def provisioner(monkeypatch, directory, missing_status=404):
+def provisioner(monkeypatch, directory, missing_status=404, model_alias=ALIAS):
     module = load_module("litellm_key_provisioner", "deploy/litellm/init_keys.py")
     master = read_env(directory / "admin.env")["LITELLM_MASTER_KEY"]
-    registry = ManagementRegistry(master, missing_status)
+    registry = ManagementRegistry(master, missing_status, model_alias)
     client = httpx.AsyncClient
 
     def factory(**kwargs):
@@ -449,3 +450,74 @@ def test_static_overlay_mounts_only_own_key_and_ca_and_keeps_verified_generation
             assert routes[0]["api_key_env"] == "AGENT_GATEWAY_API_KEY"
             assert env["AGENT_GATEWAY_API_KEY"] == "" and env["AGENT_GATEWAY_API_KEY_FILE"] == "/app/gateway/api.key"
             assert "AGENT_ENV" not in service["environment"]
+
+
+def test_qwen_bootstrap_matches_proxy_initializer_and_application_routes(tmp_path):
+    bootstrap = load_module('qwen_bootstrap', 'scripts/bootstrap_litellm.py')
+    directory = tmp_path / 'qwen'
+    bootstrap.create(directory, 'http://127.0.0.1:8080/v1', model='qwen')
+    alias = 'gateway/qwen3-1.7b-q8_0-v1'
+    admin, proxy_env = (read_env(directory / name) for name in ('admin.env', 'proxy.env'))
+    assert admin['LITELLM_MODEL_ALIAS'] == alias
+    assert 'INKLING_UPSTREAM_API_KEY' not in proxy_env
+    assert (directory / 'upstream.key').read_text().strip() == proxy_env['QWEN_UPSTREAM_API_KEY']
+    proxy = yaml.safe_load((directory / 'proxy.yaml').read_text())
+    assert len(proxy['model_list']) == 1
+    deployment = proxy['model_list'][0]
+    assert deployment['model_name'] == alias
+    assert deployment['litellm_params']['model'] == 'openai/qwen/Qwen3-1.7B'
+    assert deployment['litellm_params']['api_base'] == 'os.environ/QWEN_UPSTREAM_API_BASE'
+    assert deployment['litellm_params']['api_key'] == 'os.environ/QWEN_UPSTREAM_API_KEY'
+    assert deployment['litellm_params']['max_retries'] == 0
+    assert proxy['router_settings']['max_fallbacks'] == 0
+    assert proxy['router_settings']['cache_responses'] is False
+    assert proxy['general_settings']['store_prompts_in_spend_logs'] is False
+    manifest = json.loads((directory / 'manifest.json').read_text())
+    assert manifest['model_alias'] == alias and manifest['inference_executed'] is False
+    route = json.loads((directory / 'routes.json').read_text())[0]
+    assert route['model'] == alias and route['auth_mode'] == 'required'
+    assert route['supports_json_schema'] is True
+    overlay = yaml.safe_load((ROOT / 'compose.qwen.yaml').read_text())['services']
+    rag_env = overlay['rags']['environment']
+    assert json.loads(rag_env['RAGS_ROUTER_MODELS_JSON']) == {'qwen': alias}
+    for service in ('api', 'worker'):
+        assert json.loads(overlay[service]['environment']['AGENT_MODEL_ROUTES_JSON']) == [route]
+
+
+def test_qwen_service_keys_are_single_model_and_cannot_rebind_existing_receipts(private_config, monkeypatch):
+    alias = 'gateway/qwen3-1.7b-q8_0-v1'
+    module, registry, master = provisioner(monkeypatch, private_config, model_alias=alias)
+    module.provision(private_config, 'https://litellm:4000', master, model_alias=alias)
+    module.provision(private_config, 'https://litellm:4000', master, model_alias=alias)
+    assert len(registry.generated) == 2
+    assert all(record['models'] == [alias] for record in registry.records.values())
+    before = deepcopy(registry.records)
+    calls = list(registry.calls)
+    with pytest.raises(module.ProvisionError, match='receipt changed'):
+        module.provision(private_config, 'https://litellm:4000', master, model_alias=ALIAS)
+    assert registry.records == before and registry.calls == calls
+    assert len(registry.generated) == 2
+
+
+def test_initializer_cli_uses_explicit_qwen_administrative_selection(private_config, monkeypatch):
+    alias = 'gateway/qwen3-1.7b-q8_0-v1'
+    module, registry, master = provisioner(monkeypatch, private_config, model_alias=alias)
+    monkeypatch.setenv('LITELLM_MASTER_KEY', master)
+    monkeypatch.setenv('LITELLM_MODEL_ALIAS', alias)
+    monkeypatch.setattr(sys, 'argv', ['init_keys.py', '--directory', str(private_config)])
+    module.main()
+    assert len(registry.generated) == 2
+    assert all(record['models'] == [alias] for record in registry.records.values())
+
+
+@pytest.mark.parametrize('selection', ['*', 'openai/unapproved', '', None, ['qwen']])
+def test_unapproved_model_selection_fails_before_files_or_gateway_calls(tmp_path, monkeypatch, selection):
+    bootstrap = load_module('qwen_invalid_bootstrap', 'scripts/bootstrap_litellm.py')
+    initializer = load_module('qwen_invalid_initializer', 'deploy/litellm/init_keys.py')
+    target = tmp_path / 'private'
+    monkeypatch.setattr(initializer, 'request', lambda *_a, **_k: pytest.fail('Unexpected management call'))
+    with pytest.raises(ValueError):
+        bootstrap.create(target, model=selection)
+    with pytest.raises(ValueError):
+        initializer.provision(target, 'https://litellm:4000', 'sk-' + 'x' * 50, model_alias=selection)
+    assert not target.exists()

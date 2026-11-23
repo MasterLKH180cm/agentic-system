@@ -1,0 +1,590 @@
+{
+  "schema_version": "qwen-live-system-v1",
+  "evidence_kind": "actual_local_qwen_generation",
+  "measured_at": "2026-11-23T11:52:50.126716+00:00",
+  "status": "failed",
+  "limitations": [
+    "Synthetic public workload; no general model-quality claim.",
+    "Frozen bfloat16 admission is a separate evaluation and is not enabled in these generation flows.",
+    "Non-streaming measurements do not measure TTFT or decoder-only throughput.",
+    "One server slot; higher client concurrency includes queueing."
+  ],
+  "gateway_version": "1.110.2",
+  "host": {
+    "system": "Linux",
+    "architecture": "x86_64",
+    "logical_cpus": 9,
+    "memory_total_bytes": 10451423232,
+    "memory_available_bytes": 7139753984,
+    "disk_free_bytes": 53642993664,
+    "accelerator_policy": "cpu_only",
+    "cpu_model": "INTEL(R) XEON(R) PLATINUM 8573C"
+  },
+  "server_authentication": "explicit_api_key_file",
+  "deployment_manifest": {
+    "schema_version": "model-deployment-v1",
+    "source": "operator_supplied",
+    "runtime_name": "llama.cpp",
+    "runtime_version": "b12631",
+    "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+    "model_repository": "Qwen/Qwen3-1.7B-GGUF",
+    "model_revision": "90862c4b9d2787eaed51d12237eafdfe7c5f6077",
+    "model_artifact": "Qwen3-1.7B-Q8_0.gguf",
+    "model_sha256": "061b54daade076b5d3362dac252678d17da8c68f07560be70818cace6590cb1a",
+    "model_bytes": 1834426016,
+    "quantization": "Q8_0",
+    "context_tokens": 4096,
+    "server_parallel_slots": 1,
+    "server_threads": 8,
+    "hardware_class": "cpu",
+    "hardware_label": "x86_64",
+    "host_memory_bytes": 10451423232,
+    "accelerator_count": 0,
+    "accelerator_memory_bytes": 0
+  },
+  "execution_contract": {
+    "schema_version": "local-generation-execution-v1",
+    "source": "operator_supplied",
+    "model_alias": "qwen/Qwen3-1.7B",
+    "deployment_sha256": "8540f6c984d3deccf238345ba50481b1538468fdf3ee112033db244dc956a2c7",
+    "runtime_executable_sha256": "0a8a55cd771298988dbf7773ff0459a8f51e36f55db2552f6ab7bcd5f76df349",
+    "parameters": {
+      "hardware_class": "cpu",
+      "context_tokens": 4096,
+      "parallel_slots": 1,
+      "threads": 8,
+      "template": "model_embedded_jinja",
+      "reasoning": "off",
+      "reasoning_format": "deepseek",
+      "cache_ram_mib": 0,
+      "prompt_cache": false,
+      "temperature": 0,
+      "seed": 42
+    },
+    "model_inference_executed": true
+  },
+  "runtime": {
+    "python": "3.12.14",
+    "httpx": "0.28.1",
+    "harness_sha256": "6fe1351d372d56f1a8db292b64c5d1beba2f6e350cea626514ba0d4a42319683"
+  },
+  "source_sha256": {
+    "agentic-system/agentic/__init__.py": "93cbba17866ad838ede59bc1e0d1a8c27b98a4f6a824dbe2aedf53fd40141d60",
+    "agentic-system/agentic/admission.py": "d7151298e10ab40f673478ac8a711aa1316f9143bd83981c3e303088aa3d0a12",
+    "agentic-system/agentic/api.py": "394ed1f95776728fdceac62f62606e28c87064c9dab5ae658dfae5c3fc9c493c",
+    "agentic-system/agentic/async_io.py": "87dc9cf410a1aa1df018520678740e4e249b30691a9dfa01c23e1607b99c0854",
+    "agentic-system/agentic/auth.py": "ec5e56cf818a74ef14dcead7862d17d401fc7aaaf00ec30354413b21c0de03c5",
+    "agentic-system/agentic/config.py": "ed32875331cb4aecf567d8017a3d6ecb0a23eeb29df7fc05d06097a947e3aec5",
+    "agentic-system/agentic/control.py": "c5727da65ef98281bc302966b2346af7dabdf529c834777073c64624265b0b91",
+    "agentic-system/agentic/evidence.py": "1626d329d7c3a7eef03f8e1123181cdddcba7a010b084ea02eb81c6ceb47ace6",
+    "agentic-system/agentic/features.py": "a4bf8d7d7e711b61e7d79bae28f73196b71b7fa4b3f52d0faaa6e4ec7e842744",
+    "agentic-system/agentic/interfaces.py": "e8013046cfe5cf1aff64f23f962e9dd29d9157f9b383ea4201338d1a7447af51",
+    "agentic-system/agentic/limits.py": "ee20a69c4c3057e5c2e4b9bb245dd42b1b5ebd597007a5c9b0a46209598059de",
+    "agentic-system/agentic/mcp_server.py": "6b6e72a80f6ed86d339d22691a295304142c77dd98fae0ddfb06224d7d98a6fb",
+    "agentic-system/agentic/memory.py": "6ce10dfcfe96c1cb8e4cb2ecace8ed39f487b62d9e04e0924213722620081d6e",
+    "agentic-system/agentic/model.py": "3584d449ca390a10e93a057313dd6458f874f1cc80de9700e85d45185fbb1a56",
+    "agentic-system/agentic/pgpool.py": "ecbbc74ca4af88d695fbbab5e7e67e7523aa8f641c3c556d86cdef535fc10fde",
+    "agentic-system/agentic/planner.py": "b34a39ad1b470233e74c3e0d854cf87610918945b99644b44c855055742263a0",
+    "agentic-system/agentic/postgres.py": "b0cf5b77b4374d35018870aff1c52df96bb441550a923fe7b649c51a9f2fd4a7",
+    "agentic-system/agentic/runtime.py": "3df7b76120772bdff5206f59fbf88380177f00adb7b987d264205002411ef1c2",
+    "agentic-system/agentic/schemas.py": "12ad58caa4bb4524d7996ae9bac52ac44a48688540adf82097fbf39cc5b7d783",
+    "agentic-system/agentic/storage_adapters.py": "2fa864206bdf9d22d7c33564b46394a61010391c9498d6183076ecdd5aeb9281",
+    "agentic-system/agentic/store.py": "f3b70b2a2a81d777549295b95f7f3596fc882ce46357c3ddd9c5b842d4678cec",
+    "agentic-system/agentic/telemetry.py": "b888b2c9794394e954944e3feab128c411485d56baec426c68073393cd525b4e",
+    "agentic-system/agentic/tools.py": "107143c8499f4544d7b39b93f33894658fa9f11610ad854e89aacc06c2758658",
+    "agentic-system/agentic/worker.py": "6828a5d6d38ec42d5d48ab8f8cea9b58354c2a6971c10e5c1db71e54eeb8bd76",
+    "RAGs/rags/__init__.py": "eb421d96c421e8977ce6970f51f13d67d7b88da34996f6370bf5bc80408c96c2",
+    "RAGs/rags/__main__.py": "47bea09506b87026270063771d6660147e220b5a9a0e47a7bec4ddcbc3cfeaf9",
+    "RAGs/rags/admin.py": "6767120b1695a6004fa9eac97bdd44023c63ec1f769d4106ef750e918d5268ab",
+    "RAGs/rags/admission.py": "3bbd1906a976ebef13bf6c9e54c837af68b48a88537976fa63d5a0d74a0d380b",
+    "RAGs/rags/admission_eval.py": "a99abc96bbf74884cb1f77cb31b5f97eeb202e1a01642c5d6a561be5b119c319",
+    "RAGs/rags/agents/__init__.py": "095d5fc505a5edd2352d70201017f1854cf21f50eb35bb501477902c00d5dbc3",
+    "RAGs/rags/agents/api.py": "cf2ef18216085a99157af991e7ec57d55eeaee783adb6afe572e90f839f966c9",
+    "RAGs/rags/agents/config.py": "9bb9e9a15fed199f0a6c6bb9501dfee0aea9128f9e20ddad9d0f9c831a2dc825",
+    "RAGs/rags/agents/deadline.py": "30b2ac4c50ab68525c4b56a73172226e581bab4ebd616d1b9808ec8ce0ceb671",
+    "RAGs/rags/agents/engine.py": "c2a6ad46fe748b07ddaae2e4bb56b52b59973c8ad4c06cfca9725b3efcdf5edb",
+    "RAGs/rags/agents/memory.py": "1cb22295911e4076b4ab38bb122c88c37786ba80b8cef9ad2909687333236a6d",
+    "RAGs/rags/agents/router.py": "0a85894a2f29136a6c403a9ee80be114ce4e802a000a35e77debcf70b43bad92",
+    "RAGs/rags/agents/state.py": "cb6583cbe5cb11b175e838e6f3616c4389e66ecf0baef053b1b6e47ed0409eea",
+    "RAGs/rags/agents/templates.py": "c7e1f6b194e0532c1eb461a39f6063122c303a9b17761235547878100bd6f00f",
+    "RAGs/rags/agents/workflow.py": "836627aa263fe253762490bfbc2d08277fa98381c5e07cc0428c3a9cd567c646",
+    "RAGs/rags/answerability.py": "8b0c107bb16be006fbe49c2118be97cc673970882390c23f4c616737b361345e",
+    "RAGs/rags/api.py": "157b52b69e999de7d00e2faa40a9abdfc16cbbf090835c461b1a2f53f1a4c3a1",
+    "RAGs/rags/auth.py": "74902025161b3432d293155bb0d2dc5d7b567fb43119a8bc0e7dd44f472a551d",
+    "RAGs/rags/backends.py": "294d28f4dc330ab7eca6789f6172dd7a5c406f7f80879268d9738b6c177a725a",
+    "RAGs/rags/benchmark.py": "2940b417b7ede3bdcba17f7e025b4338157386c5f2e019c08436896bd734879e",
+    "RAGs/rags/chunking.py": "1405478e8c1d5eee68129e4fcc272b6b3a69f9549c05d2e270404799fd830145",
+    "RAGs/rags/cli.py": "d3e06ca5249be0655206e85d0e2c8f9f2081bb1cb285b98ae1e109a033da10b0",
+    "RAGs/rags/config.py": "26d5f1ce5e813dea7f8bf4e39e4b7c3386da04745fd97a8a77644c56703abdf2",
+    "RAGs/rags/evaluate.py": "55f34ef9d56ed9cf35193d8b34e3b17ac53e4828b621ea04fc6cb01add2e6518",
+    "RAGs/rags/features.py": "9c5f07f6fae2a7615e57e8cae052f0163a1316d847cd477f0ac7074b9ac21ae1",
+    "RAGs/rags/limits.py": "ee20a69c4c3057e5c2e4b9bb245dd42b1b5ebd597007a5c9b0a46209598059de",
+    "RAGs/rags/mcp_server.py": "28fd9315513763acf2279fd18c64ac72ec0c22c5cee4128f99ed3fadc5b84a3f",
+    "RAGs/rags/migrate.py": "127d95de285b00ea2318c718b68d8eac4a53aedbe92e1b47cc1eea1f81a82010",
+    "RAGs/rags/model_benchmark.py": "6dcd1ff0dd2dc48b329c906e31cf01afa1dbe1a212d8d2b72aad0fe2a6eeb444",
+    "RAGs/rags/model_profiles.py": "c1977e25a425e7b502848e0c550ba4c04326716326a3f5e730f638d9e2f9ed28",
+    "RAGs/rags/monitoring.py": "d44e303ae630cf69378b5919d1ebf304a6c01b9bd6e2e25db2dd61ea590bb67b",
+    "RAGs/rags/multimodal.py": "8b728901107882d3f01d68a3f3310affba7a4ca68063ef88ecfa788c8e5eb982",
+    "RAGs/rags/native.py": "2cde4f35242120df7c671f48d3da03911ac679fa764add9d8fd1c7937de34e46",
+    "RAGs/rags/postgres.py": "88012879aff9343250b0b772a47e5b80157629f4bd8c510e0900d5af13dc562b",
+    "RAGs/rags/provider_transport.py": "6dba79e69ef3f57dceba1753fc6fc85a092d3e5619da5a757f13e57a05568b8d",
+    "RAGs/rags/providers.py": "40e26876b1cc6e769bb1cf14da8fbd2eee88c755c6306b89e5870e2185f9ff25",
+    "RAGs/rags/registry.py": "125ba7209a2b503be7b1253e1b5c3c2d474133132eccf4034b212be76ca41418",
+    "RAGs/rags/research/__init__.py": "7166dd4d357e8625fdfdb5ac49b7a030993de3b791ad1b87ba920ba0fbf927fc",
+    "RAGs/rags/research/common.py": "d63cba81438cf528fb08eb0bd04322324c33194d9ba219b1cd8dffa81abf7eb3",
+    "RAGs/rags/research/lightrag_adapter.py": "f21835b3c20ab57dc8743a1259def4ca14172ceadd921d34835a86bdf17dfec9",
+    "RAGs/rags/research/raptor_adapter.py": "e5b4dd013a35dfacc2e24c595fdbf7bfa679d758bb30087cfaac3557062e1420",
+    "RAGs/rags/research_protocol.py": "5d8eba40e4d1cc371827d75c62e60ccbb48c36895aa11f40a3c50df749c5b870",
+    "RAGs/rags/research_service.py": "abccffa7ed744893b14b9eb200c0be70a47cad4568b92fd2162ceb6ae3cb3c1a",
+    "RAGs/rags/research_worker.py": "63c74da9d8d42a9e83852b39332b3b8c6dc8cb272b280996df0ccfb8a3ece85d",
+    "RAGs/rags/retrieval.py": "20ee6f0b9505ccf90ebbce857033f1738271cac71445dc7353d35397356d1bc9",
+    "RAGs/rags/storage.py": "9b8a832eddc9f8d0260093f5271f6909659bfd24353a4b344fb8411b01cff764",
+    "RAGs/rags/tokenization.py": "7160b9a3533f4e6b7d03356e62dcd1c28dd2904a1584b617378c705bd8eddb24",
+    "RAGs/rags/verify_admission.py": "284e0f583dc95382e45a4ed88dee87b2b5ba6c8f0910e347109905dcfb40be4d",
+    "RAGs/rags/vision.py": "7bbac95a663a409fd5f897b0d452e4bb67217ca320268089b163df1a2c7c0f1f",
+    "agentic-system/scripts/qwen_acceptance.py": "9e5848d69819d96f25763ff1bd5e430a30b5773a2ff72bcd7bf82277c067de4c",
+    "agentic-system/scripts/bootstrap_litellm.py": "9e58308f7bd855c405d59a126f59b886e88de7d1b21e82f0915e089612c0423c",
+    "agentic-system/deploy/litellm/init_keys.py": "b0db2107f117a2bc7f76f44d8647510e5a4b76f40ee19572d38ba35ab86ae550",
+    "agentic-system/deploy/litellm/proxy.yaml": "c2b36dc3fdd0ab90945d853b2b1a579587e7f434c81c152084f640ac7c17d0a8"
+  },
+  "application_storage": {
+    "backend": "postgresql_pgvector",
+    "distinct_gateway_rag_agent_databases": true,
+    "postgres_version": "17.12",
+    "pgvector_version": "0.8.7"
+  },
+  "model_startup_seconds": 1.816712,
+  "server_properties": {
+    "total_slots": 1,
+    "default_generation_settings": {
+      "params": {
+        "seed": 42,
+        "temperature": 0.0,
+        "dynatemp_range": 0.0,
+        "dynatemp_exponent": 1.0,
+        "top_k": 40,
+        "top_p": 0.949999988079071,
+        "min_p": 0.05000000074505806,
+        "top_n_sigma": -1.0,
+        "xtc_probability": 0.0,
+        "xtc_threshold": 0.10000000149011612,
+        "typical_p": 1.0,
+        "repeat_last_n": 64,
+        "repeat_penalty": 1.0,
+        "presence_penalty": 0.0,
+        "frequency_penalty": 0.0,
+        "dry_multiplier": 0.0,
+        "dry_base": 1.75,
+        "dry_allowed_length": 2,
+        "dry_penalty_last_n": 64,
+        "mirostat": 0,
+        "mirostat_tau": 5.0,
+        "mirostat_eta": 0.10000000149011612,
+        "adaptive_target": -1.0,
+        "adaptive_decay": 0.8999999761581421,
+        "max_tokens": -1,
+        "n_predict": -1,
+        "n_keep": 0,
+        "n_discard": 0,
+        "ignore_eos": false,
+        "stream": false,
+        "n_probs": 0,
+        "min_keep": 0,
+        "chat_format": "Content-only",
+        "reasoning_format": "none",
+        "reasoning_in_content": false,
+        "generation_prompt": "",
+        "samplers": [
+          "penalties",
+          "dry",
+          "top_n_sigma",
+          "top_k",
+          "typ_p",
+          "top_p",
+          "min_p",
+          "xtc",
+          "temperature"
+        ],
+        "speculative.types": "none",
+        "timings_per_token": false,
+        "post_sampling_probs": false,
+        "backend_sampling": false,
+        "lora": []
+      },
+      "n_ctx": 4096
+    }
+  },
+  "baseline_planner_sha256": "9db29139d29fef984dbf840d318c48b0faf93ff54ba9c7e08cecbc917d053e8b",
+  "planner_replay": [
+    {
+      "variant": "baseline",
+      "valid": false,
+      "error_type": "ValueError",
+      "elapsed_seconds": 14.076229,
+      "prompt_sha256": "e28fc7f9944529ce157b0767e4e018c94524e2a6a9ff007754ee72feb2d3071a",
+      "response_schema_sha256": null,
+      "request_attempted": true,
+      "http_status": 200,
+      "reported_usage": {
+        "completion_tokens": 200,
+        "prompt_tokens": 179,
+        "total_tokens": 379
+      },
+      "inference_confirmed": true,
+      "output": "{\n  \"steps\": [\n    {\n      \"id\": 1,\n      \"tool\": \"rag.search\",\n      \"args\": {\n        \"query\": \"sample retention period\"\n      },\n      \"depends_on\": []\n    },\n    {\n      \"id\": 2,\n      \"tool\": \"model.summarize\",\n      \"args\": {\n        \"evidence\": [\n          {\n            \"source\": \"https://example.com/retention-period\",\n            \"content\": \"The sample retention period is typically 30 days for most pharmaceutical samples, but can vary based on the specific requirements of the organization or regulatory standards.\"\n          },\n          {\n            \"source\": \"https://example.com/quality-control\",\n            \"content\": \"Retention periods are determined based on the stability and degradation of the sample, as well as the intended use of the data.\"\n          }\n        ]\n      },\n      \"depends_on\": [\n        \"rag.search\"\n      ]\n    }\n  ]\n}",
+      "raw_output": "{\n  \"steps\": [\n    {\n      \"id\": 1,\n      \"tool\": \"rag.search\",\n      \"args\": {\n        \"query\": \"sample retention period\"\n      },\n      \"depends_on\": []\n    },\n    {\n      \"id\": 2,\n      \"tool\": \"model.summarize\",\n      \"args\": {\n        \"evidence\": [\n          {\n            \"source\": \"https://example.com/retention-period\",\n            \"content\": \"The sample retention period is typically 30 days for most pharmaceutical samples, but can vary based on the specific requirements of the organization or regulatory standards.\"\n          },\n          {\n            \"source\": \"https://example.com/quality-control\",\n            \"content\": \"Retention periods are determined based on the stability and degradation of the sample, as well as the intended use of the data.\"\n          }\n        ]\n      },\n      \"depends_on\": [\n        \"rag.search\"\n      ]\n    }\n  ]\n}"
+    },
+    {
+      "variant": "current",
+      "valid": true,
+      "steps": [
+        {
+          "id": "retrieve",
+          "tool": "rag.search",
+          "args": {
+            "question": "What is the sample retention period?",
+            "mode": "hybrid",
+            "top_k": 2
+          },
+          "depends_on": [],
+          "approval_required": false
+        },
+        {
+          "id": "answer",
+          "tool": "model.summarize",
+          "args": {
+            "question": "What is the sample retention period?"
+          },
+          "depends_on": [
+            "retrieve"
+          ],
+          "approval_required": false
+        }
+      ],
+      "elapsed_seconds": 11.135774,
+      "prompt_sha256": "0a98549bf5b3ebcb81c399cc2711e6a828e7c2bdae38228ff1bdf1655308283a",
+      "response_schema_sha256": "b5e1e3ff687cdc566a99c9122eb63f66fcfeee5db9ad7e952366b4b5ce474b01",
+      "request_attempted": true,
+      "http_status": 200,
+      "reported_usage": {
+        "completion_tokens": 118,
+        "prompt_tokens": 386,
+        "total_tokens": 504
+      },
+      "inference_confirmed": true,
+      "output": "{\n  \"steps\": [\n    {\n      \"id\": \"retrieve\",\n      \"tool\": \"rag.search\",\n      \"args\": {\n        \"question\": \"What is the sample retention period?\",\n        \"mode\": \"hybrid\",\n        \"top_k\": 2\n      },\n      \"depends_on\": []\n    },\n    {\n      \"id\": \"answer\",\n      \"tool\": \"model.summarize\",\n      \"args\": {\n        \"question\": \"What is the sample retention period?\"\n      },\n      \"depends_on\": [\"retrieve\"]\n    }\n  ]\n}",
+      "raw_output": "{\n  \"steps\": [\n    {\n      \"id\": \"retrieve\",\n      \"tool\": \"rag.search\",\n      \"args\": {\n        \"question\": \"What is the sample retention period?\",\n        \"mode\": \"hybrid\",\n        \"top_k\": 2\n      },\n      \"depends_on\": []\n    },\n    {\n      \"id\": \"answer\",\n      \"tool\": \"model.summarize\",\n      \"args\": {\n        \"question\": \"What is the sample retention period?\"\n      },\n      \"depends_on\": [\"retrieve\"]\n    }\n  ]\n}"
+    }
+  ],
+  "rag_generation": {
+    "elapsed_seconds": 3.993314,
+    "outcome": "success",
+    "answer": "Sample archive exports are retained for 14 days. After 14 days, they are deleted. [ad908e827141f76ecabe7cb3a1ba3bf6]",
+    "usage": {
+      "calls": 1,
+      "provider_reports": [
+        {
+          "kind": "generation",
+          "model": "router:gateway/qwen3-1.7b-q8_0-v1",
+          "usage": {
+            "prompt_tokens": 120,
+            "completion_tokens": 49,
+            "total_tokens": 169,
+            "cached_prompt_tokens": 0
+          }
+        }
+      ],
+      "token_usage": "provider_reported",
+      "cost": null,
+      "cost_reason": "No operator pricing schedule configured"
+    },
+    "citations": [
+      {
+        "chunk_id": "ad908e827141f76ecabe7cb3a1ba3bf6",
+        "document_id": "sample-archive",
+        "title": "Sample archive policy",
+        "source": "manual",
+        "section": "Document",
+        "score": 0.03278689,
+        "text": "The sample archive retains exports for 14 days. After 14 days, sample exports are deleted.",
+        "revision": "d3b3ef6eed934dada82b24bbf78d3453",
+        "profile_id": "4883dda4219c75d1d1a7f13b6f47a568a3deb4708d90d5bc3ee7ad53f8918ca1",
+        "start_char": 0,
+        "end_char": 90,
+        "origin_source": "local",
+        "origin_chunk_id": "ad908e827141f76ecabe7cb3a1ba3bf6"
+      }
+    ],
+    "citation_count": 1,
+    "citation_document_ids": [
+      "sample-archive"
+    ],
+    "acceptance": {
+      "schema_version": "qwen-rag-proof-v1",
+      "status": "passed",
+      "expected_value": 14,
+      "citation_count": 1,
+      "cited_document_ids": [
+        "sample-archive"
+      ],
+      "model": "router:gateway/qwen3-1.7b-q8_0-v1",
+      "reported_generation_calls": 1,
+      "usage": {
+        "prompt_tokens": 120,
+        "completion_tokens": 49
+      }
+    }
+  },
+  "workflows": [
+    {
+      "case": "explicit_arithmetic",
+      "status": "completed",
+      "run_id": "c75fbe24-5a13-470a-8e26-43403f848c02",
+      "tenant": "qwen-live-synthetic",
+      "elapsed_seconds": 3.715639,
+      "usage": {
+        "calls": [
+          {
+            "id": "b7be99a760194caf8a28618c1d159a67",
+            "tenant": "qwen-live-synthetic",
+            "run_id": "c75fbe24-5a13-470a-8e26-43403f848c02",
+            "route": "qwen-gateway-v1",
+            "purpose": "synthesis",
+            "input_tokens": 211,
+            "output_tokens": 23,
+            "charged_tokens": 234,
+            "cost_microusd": null,
+            "status": "reported",
+            "created_at": "2026-11-23T11:53:50.680273+00:00"
+          }
+        ],
+        "charged_tokens": 234,
+        "estimated_cost_usd": null,
+        "known_cost_usd": 0.0,
+        "cost_complete": false,
+        "usage_complete": true
+      },
+      "steps": [
+        {
+          "id": "calculate",
+          "tool": "math.calculate",
+          "status": "completed",
+          "attempts": 1,
+          "depends_on": [],
+          "args": {
+            "expression": "19 * 23"
+          },
+          "checkpoint": {},
+          "result": {
+            "expression": "19 * 23",
+            "value": 437
+          },
+          "error": null
+        },
+        {
+          "id": "answer",
+          "tool": "model.summarize",
+          "status": "completed",
+          "attempts": 1,
+          "depends_on": [
+            "calculate"
+          ],
+          "args": {},
+          "checkpoint": {},
+          "result": {
+            "outcome": "success",
+            "answer": "437",
+            "citations": [],
+            "refusal_reason": null,
+            "observations": [
+              {
+                "step": "calculate",
+                "kind": "arithmetic",
+                "value": 437,
+                "expression": "19 * 23"
+              }
+            ],
+            "evidence_contract_version": 2,
+            "source_admissions": {}
+          },
+          "error": null
+        }
+      ],
+      "acceptance": {
+        "schema_version": "qwen-workflow-proof-v1",
+        "case": "explicit_arithmetic",
+        "status": "passed",
+        "expected_value": 437,
+        "completed_syntheses": 1,
+        "completed_retrievals": 0,
+        "citation_count": 0,
+        "cited_document_ids": [],
+        "reported_calls_by_purpose": {
+          "planning": 0,
+          "synthesis": 1
+        },
+        "usage": {
+          "input_tokens": 211,
+          "output_tokens": 23,
+          "charged_tokens": 234
+        }
+      }
+    },
+    {
+      "case": "planned_retrieval",
+      "status": "failed",
+      "run_id": "35bde010-6d51-4c57-a285-32101cda72f1",
+      "tenant": "qwen-live-synthetic",
+      "elapsed_seconds": 20.306688,
+      "usage": {
+        "calls": [
+          {
+            "id": "7f03fbbd90db43f4934c47b2db706a13",
+            "tenant": "qwen-live-synthetic",
+            "run_id": "35bde010-6d51-4c57-a285-32101cda72f1",
+            "route": "qwen-gateway-v1",
+            "purpose": "planning",
+            "input_tokens": 389,
+            "output_tokens": 120,
+            "charged_tokens": 509,
+            "cost_microusd": null,
+            "status": "reported",
+            "created_at": "2026-11-23T11:53:54.427174+00:00"
+          },
+          {
+            "id": "1219089c6dc4439aa9ba32e437ff6adf",
+            "tenant": "qwen-live-synthetic",
+            "run_id": "35bde010-6d51-4c57-a285-32101cda72f1",
+            "route": "qwen-gateway-v1",
+            "purpose": "synthesis",
+            "input_tokens": 243,
+            "output_tokens": 78,
+            "charged_tokens": 321,
+            "cost_microusd": null,
+            "status": "reported",
+            "created_at": "2026-11-23T11:54:07.375429+00:00"
+          }
+        ],
+        "charged_tokens": 830,
+        "estimated_cost_usd": null,
+        "known_cost_usd": 0.0,
+        "cost_complete": false,
+        "usage_complete": true
+      },
+      "steps": [
+        {
+          "id": "planner",
+          "tool": "workflow.plan",
+          "status": "completed",
+          "attempts": 1,
+          "depends_on": [],
+          "args": {},
+          "checkpoint": {
+            "expanded": true,
+            "step_ids": [
+              "p0_retrieve",
+              "p1_answer"
+            ]
+          },
+          "result": {
+            "planned_steps": [
+              "p0_retrieve",
+              "p1_answer"
+            ]
+          },
+          "error": null
+        },
+        {
+          "id": "p0_retrieve",
+          "tool": "rag.search",
+          "status": "completed",
+          "attempts": 1,
+          "depends_on": [
+            "planner"
+          ],
+          "args": {
+            "question": "How long are sample archive exports retained?",
+            "mode": "hybrid",
+            "top_k": 5
+          },
+          "checkpoint": {},
+          "result": {
+            "answer": "[ad908e827141f76ecabe7cb3a1ba3bf6] The sample archive retains exports for 14 days. After 14 days, sample exports are deleted.",
+            "citations": [
+              {
+                "chunk_id": "ad908e827141f76ecabe7cb3a1ba3bf6",
+                "document_id": "sample-archive",
+                "text": "The sample archive retains exports for 14 days. After 14 days, sample exports are deleted.",
+                "text_truncated": false,
+                "title": "Sample archive policy",
+                "source": "manual",
+                "section": "Document",
+                "revision": "d3b3ef6eed934dada82b24bbf78d3453",
+                "profile_id": "4883dda4219c75d1d1a7f13b6f47a568a3deb4708d90d5bc3ee7ad53f8918ca1",
+                "origin_source": "local",
+                "origin_chunk_id": "ad908e827141f76ecabe7cb3a1ba3bf6",
+                "start_char": 0,
+                "end_char": 90,
+                "score": 0.03278689
+              }
+            ],
+            "retrieval": {
+              "outcome": "success",
+              "supported": null,
+              "refusal_reason": null,
+              "admission": {
+                "policy_version": "evidence-admission-v1",
+                "decision": "unassessed",
+                "basis": "ranked_unassessed",
+                "profile_id": null,
+                "score": null,
+                "threshold": null,
+                "candidate_count": 1,
+                "accepted_count": 1
+              }
+            },
+            "quarantined_ids": [],
+            "strategy": "hybrid",
+            "requested_strategy": "hybrid",
+            "generation": false,
+            "evidence_contract_version": 2,
+            "engine": "full-text and cosine reciprocal rank fusion"
+          },
+          "error": null
+        },
+        {
+          "id": "p1_answer",
+          "tool": "model.summarize",
+          "status": "failed",
+          "attempts": 1,
+          "depends_on": [
+            "p0_retrieve",
+            "planner"
+          ],
+          "args": {
+            "question": "How long are sample archive exports retained?"
+          },
+          "checkpoint": {},
+          "result": null,
+          "error": "ValueError: tool execution failed"
+        }
+      ]
+    }
+  ],
+  "error_type": "AcceptanceFailure",
+  "error_location": [
+    {
+      "module": "check_qwen_live.py",
+      "line": 389,
+      "function": "check"
+    },
+    {
+      "module": "check_qwen_live.py",
+      "line": 273,
+      "function": "system_workflows"
+    }
+  ],
+  "failure": "qwen_workflow_not_completed",
+  "elapsed_seconds": 85.31665,
+  "child_peak_rss_bytes": 2441273344
+}

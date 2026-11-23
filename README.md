@@ -350,7 +350,13 @@ use a separate path with 1–20 validated dataset identities. A supported count
 of zero is useful evidence; an absent dataset or fabricated provenance is not.
 Finite arithmetic zero is also retained.
 
-The current companion Qwen profile **failed its frozen quality gates and is not enabled by default**: it refused 9/16 held-out unanswerable cases, and admitted hybrid Recall@3 fell from 0.85 to 0.70. See the [measured RAG report](https://github.com/MasterLKH180cm/RAGs/blob/feat/spec-driven-v02/reports/admission-verification-qwen-v03.json). Correct refusal propagation and an allowlisted profile ID do not establish model quality.
+The companion Qwen profile **failed its historical 2026-11-21 frozen quality
+gates and is not enabled by default**: it refused 9/16 held-out unanswerable
+cases, and admitted hybrid Recall@3 fell from 0.85 to 0.70. See the
+[historical RAG report](https://github.com/MasterLKH180cm/RAGs/blob/f7b76d847cefca23a1142f66bb201d1dc01931ee/reports/admission-verification-qwen-v03.json)
+and the separate [2026-11-23 generation and admission evidence](docs/QWEN_RESULTS_20261123.md).
+Correct refusal propagation and an allowlisted profile ID do not establish
+model quality.
 
 Events expose only fixed outcome/reason/basis values, approved profile IDs,
 bounded counts and validated engine identity. New diagnostic metadata does not
@@ -555,6 +561,58 @@ local hashing as the default. Both direct providers and the offline deployment
 remain available. Follow the guide for bootstrap, Prisma preparation and the
 direct/proxy comparison; synthetic upstream fixtures establish transport
 behavior, not Inkling inference quality or speed.
+
+For Qwen3-1.7B Q8_0, select `bootstrap_litellm.py --model qwen` in a new
+deployment and apply `compose.qwen.yaml` last. The [Qwen gateway contract](docs/QWEN_GATEWAY_SPEC.md)
+uses its own `gateway/qwen3-1.7b-q8_0-v1` alias and service-key scope. The
+[planner contract](docs/QWEN_PLANNER_SPEC.md) supplies permitted tool argument
+schemas without truncating JSON. `scripts/check_qwen_live.py` runs actual local
+Qwen inference through independent RAG/API/worker processes, PostgreSQL/pgvector,
+the TLS gateway, and direct/gateway benchmarks; it requires preverified weights,
+a pinned server and an explicitly disposable PostgreSQL administrator endpoint.
+
+The supplied Qwen routes explicitly enable `supports_json_schema`. This
+capability is otherwise off and requires support on every effective fallback
+route. The [structured-output contract](docs/QWEN_STRUCTURED_OUTPUT_SPEC.md)
+accounts for schema bytes before requests, preserves reported usage on rejected
+outputs, and retains local planning, citation and numeric validation. Opted-in
+synthesis uses `synthesis-text-v1`: the model produces prose and selects source
+IDs; the application always preserves that prose and renders the selected
+references. It never chooses missing citations or repairs malformed output.
+The external answer envelope and offline behavior remain unchanged.
+
+### Qwen measurements — 2026-11-23
+
+The [Qwen results and evidence](docs/QWEN_RESULTS_20261123.md) record actual
+Qwen3-1.7B Q8_0 inference through the TLS gateway. RAG generation and all three
+Agentic workflows passed: cited retrieval answered **14 days**, and arithmetic
+completed **19 × 23 = 437** with dependent synthesis. The final run observed
+**4.432 s** for RAG generation, **5.532 s** for explicit arithmetic, **24.006 s**
+for planned retrieval and **23.115 s** for the adaptive retrieval loop. These
+are single full-workflow observations, not latency distributions.
+
+The separate raw generation-contract benchmark **failed**: both paths passed
+five of six fixed case types; the grounded-answer case failed behavioral
+validation throughout. Across 192 requests including warmup, 160 passed and 32
+failed. Every measured phase retains all **30 attempted requests** alongside its
+**25 validated responses**. The report includes descriptive latency and
+throughput, but **no speedup or LiteLLM performance-gain claim**. Application
+workflow passes do not override this model-contract failure.
+
+[Feature CI 45174330740](https://github.com/MasterLKH180cm/agentic-system/actions/runs/45174330740)
+passed all eight jobs and **939 pytest cases**, including actual S3. The
+[local manifest](docs/testing-results-qwen-20261123.json) records **938** cases
+and explicitly excludes S3. The detailed report binds the measured first
+feature commit and harness bytes, distinguishes the later AST-equivalent
+formatting edit, and preserves the failed development attempts. The final
+evidence publication and exact-revision checks are tracked in
+[PR #11](https://github.com/MasterLKH180cm/agentic-system/pull/11).
+The separate fresh native admission replay completed in **31 min 40.946 s**:
+**21/21 correctness checks passed**, but **7/11 quality gates passed**, with
+**exit 2** and promotion failed. Its **472 reconstructed forwards** are not the
+192 Q8 generation requests; peak child RSS was **3.720 GiB**. The frozen profile
+remains **disabled by default**. The results report preserves its exact profile,
+source hashes, four failed gates and the earlier timeout as separate evidence.
 
 ## PostgreSQL concurrency and storage measurement
 
@@ -1250,12 +1308,15 @@ throughput, fairness, and high-availability behavior need workload-specific vali
 rate limits, not a task queue. No general code sandbox, vector-memory service,
 or tamper-evident audit ledger is claimed.
 
-The companion Qwen profile's frozen quality gates remain failed: **9/16**
-held-out unanswerable cases refused, with admitted hybrid Recall@3 falling from
-**0.85 to 0.70**. The profile remains disabled by default. Agent refusal,
-accounting and browser tests do not change those measurements. Citation and
-numeric support checks remain heuristic; paid-provider answer quality and
-production throughput/failover are outside these functional test results.
+The companion Qwen profile's **historical 2026-11-21** frozen quality result
+remains failed: **9/16** held-out unanswerable cases refused, with admitted hybrid
+Recall@3 falling from **0.85 to 0.70**. The profile remains disabled by default.
+The [2026-11-23 evidence](docs/QWEN_RESULTS_20261123.md) separates that history,
+the fresh native replay, successful application generation and the failed raw
+generation benchmark. Agent refusal, accounting and browser tests do not change
+those measurements. Citation and numeric support checks remain heuristic;
+paid-provider answer quality and production throughput/failover are outside
+these functional test results.
 
 Contribution rules are in [AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md).
 Licensed under the [MIT License](LICENSE).
