@@ -63,7 +63,8 @@ async def test_model_planner_rejects_unallowlisted_tool():
     class Model:
         config = type("Config", (), {"provider": "openai"})()
 
-        async def complete(self, system, goal):
+        async def complete(self, system, goal, *, purpose):
+            assert purpose == "planning"
             return '{"steps":[{"id":"danger","tool":"shell.execute","args":{}}]}'
 
     with pytest.raises(ValueError, match="invalid or unsafe"):

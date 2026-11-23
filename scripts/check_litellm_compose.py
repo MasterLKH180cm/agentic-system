@@ -15,6 +15,8 @@ import stat
 import subprocess
 import tempfile
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ("compose.yaml", "compose.litellm.yaml", "deploy/litellm/compose.yaml",
@@ -34,8 +36,13 @@ def load_script(name):
     return module
 
 
-def check(compose: list[str]) -> dict:
-    source = {name: (ROOT / name).read_bytes() for name in FILES}
+def check(compose: list[str], *, model: str = "inkling") -> dict:
+    bootstrap = load_script("bootstrap_litellm")
+    require(model in bootstrap.PRESETS, "Unknown gateway model preset")
+    selected = bootstrap.PRESETS[model]
+    alias = selected["alias"]
+    files = FILES + (("compose.qwen.yaml",) if model == "qwen" else ())
+    source = {name: (ROOT / name).read_bytes() for name in files}
     version = subprocess.check_output([*compose, "version", "--short"], text=True, timeout=10).strip()
     with tempfile.TemporaryDirectory(prefix="agentic-gateway-compose-") as temporary:
         work = Path(temporary) / "agentic-system"
@@ -45,18 +52,30 @@ def check(compose: list[str]) -> dict:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(content)
         load_script("bootstrap_compose").create(work)
-        load_script("bootstrap_litellm").create(work / "data/litellm")
+        bootstrap.create(work / "data/litellm", model=model)
         env = {key: value for key, value in os.environ.items() if not key.startswith((
-            "AGENT_", "RAGS_", "OPENAI_", "ANTHROPIC_", "TINKER_", "LITELLM_", "INKLING_", "POSTGRES_", "AWS_", "OTEL_",
+            "AGENT_", "RAGS_", "OPENAI_", "ANTHROPIC_", "TINKER_", "LITELLM_", "INKLING_", "QWEN_",
+            "POSTGRES_", "AWS_", "OTEL_",
         ))}
+        selected_overlay = ["-f", str(work / "compose.qwen.yaml")] if model == "qwen" else []
         result = subprocess.run([
             *compose, "--project-directory", str(work), "--env-file", str(work / ".env"),
             "-f", str(work / "compose.yaml"), "-f", str(work / "compose.litellm.yaml"),
+            *selected_overlay,
             "--profile", "litellm", "config", "--format", "json",
         ], env=env, capture_output=True, text=True, check=True, timeout=30)
         services = json.loads(result.stdout)["services"]
         require(set(services) == {"api", "worker", "rags", "postgres", "litellm", "litellm-db", "litellm-init"},
                 "Unexpected gateway stack services")
+        standalone = subprocess.run([
+            *compose, "--project-directory", str(work / "deploy/litellm"),
+            "--env-file", str(work / ".env"), "-f", str(work / "deploy/litellm/compose.yaml"),
+            "--profile", "litellm", "config", "--format", "json",
+        ], env=env, capture_output=True, text=True, check=True, timeout=30)
+        standalone_services = json.loads(standalone.stdout)["services"]
+        require(set(standalone_services) == {"litellm", "litellm-db", "litellm-init"}
+                and all(standalone_services[name] == services[name] for name in standalone_services),
+                "Standalone and included gateways must retain the same configuration")
         initializer = services["litellm-init"]
         require(initializer["user"] == "0:0" and initializer["restart"] == "no"
                 and initializer["cap_drop"] == ["ALL"] and initializer["cap_add"] == ["DAC_OVERRIDE"]
@@ -81,15 +100,25 @@ def check(compose: list[str]) -> dict:
         require(stat.S_IMODE((work / "data/litellm").stat().st_mode) == 0o700
                 and stat.S_IMODE((work / "data/litellm/receipts").stat().st_mode) == 0o700,
                 "Bootstrap secrets and receipts must remain host-private")
-        require(set(initializer["environment"]) == {"LITELLM_MASTER_KEY"},
-                "Initializer must receive only its required management credential")
+        administrative_fields = {"LITELLM_MASTER_KEY"} | ({"LITELLM_MODEL_ALIAS"} if model == "qwen" else set())
+        require(set(initializer["environment"]) == administrative_fields
+                and initializer["environment"].get("LITELLM_MODEL_ALIAS", bootstrap.ALIAS) == alias,
+                "Initializer must receive only its management credential and selected alias")
+        proxy = yaml.safe_load((work / "data/litellm/proxy.yaml").read_text())
+        require(len(proxy["model_list"]) == 1 and proxy["model_list"][0]["model_name"] == alias
+                and proxy["model_list"][0]["litellm_params"]["model"] == "openai/" + selected["model"],
+                "Gateway must expose the selected immutable generation deployment only")
+        generated_routes = json.loads((work / "data/litellm/routes.json").read_text())
+        require(len(generated_routes) == 1 and generated_routes[0]["model"] == alias,
+                "Bootstrap must generate one route to the selected alias")
         for name in ("api", "worker", "rags"):
             service = services[name]
             require(service["depends_on"]["litellm-init"]["condition"] == "service_completed_successfully",
                     "Applications require completed key provisioning")
             require(service["depends_on"]["postgres"]["condition"] == "service_healthy",
                     "Application database readiness must survive override merging")
-            require("LITELLM_MASTER_KEY" not in service["environment"], "Application received the master key")
+            require(not ({"LITELLM_MASTER_KEY", "LITELLM_MODEL_ALIAS"} & service["environment"].keys()),
+                    "Application received administrative gateway configuration")
             require(not service.get("cap_add"), "Applications must not inherit initializer capabilities")
             mounts = [item for item in service["volumes"] if item.get("target") == "/app/gateway"]
             owner = "rags" if name == "rags" else "agentic"
@@ -100,12 +129,17 @@ def check(compose: list[str]) -> dict:
         require(rag["RAGS_ENV"] == "production" and rag["RAGS_ROUTER_ALLOW_HTTP"] == "false"
                 and rag["RAGS_ROUTER_GATEWAY_URL"] == "https://litellm:4000/v1", "RAG gateway requires production TLS")
         require(rag["RAGS_EMBEDDING_PROVIDER"] == "local", "Gateway override must retain the separate embedding provider")
+        require(rag["RAGS_GENERATION_MODEL"] == model
+                and json.loads(rag["RAGS_ROUTER_MODELS_JSON"]) == {model: alias}
+                and json.loads(rag["RAGS_ROUTER_MODEL_OPTIONS_JSON"]) == {model: {"protocol": "openai"}},
+                "RAG must select only the bootstrapped generation alias")
         require(services["litellm"]["ports"][0]["host_ip"] == "127.0.0.1", "Gateway host port must remain loopback")
         require("ports" not in services["litellm-db"], "Gateway database must not publish a host port")
         from agentic.config import Settings
         for name in ("api", "worker"):
             config = dict(services[name]["environment"])
             routes = json.loads(config["AGENT_MODEL_ROUTES_JSON"])
+            require(routes == generated_routes, "Application routes must match the selected bootstrap route")
             for route in routes:
                 route["ca_file"] = str(work / "data/litellm/agentic/ca.pem")
             config["AGENT_MODEL_ROUTES_JSON"] = json.dumps(routes)
@@ -117,7 +151,8 @@ def check(compose: list[str]) -> dict:
                 os.environ.update(env)
                 os.environ.update(config)
                 resolved = Settings.from_env()
-                require(resolved.routes[0].api_key == (work / "data/litellm/agentic/api.key").read_text().strip(),
+                require(len(resolved.routes) == 1 and resolved.routes[0].model == alias
+                        and resolved.routes[0].api_key == (work / "data/litellm/agentic/api.key").read_text().strip(),
                         "Model route must use its designated gateway key")
                 require(resolved.routes[0].base_url == "https://litellm:4000/v1"
                         and resolved.routes[0].ca_file == str(work / "data/litellm/agentic/ca.pem"),
@@ -126,11 +161,13 @@ def check(compose: list[str]) -> dict:
                 os.environ.clear()
                 os.environ.update(original)
     return {"schema_version": 1, "status": "passed", "compose_version": version,
+            "model_preset": model, "model_alias": alias,
             "services": sorted(services), "gateway_image": services["litellm"]["image"],
             "validations": ["actual_compose_include_merge", "production_https", "service_key_mount_isolation",
                             "master_key_absent_from_applications", "startup_dependency_gate", "database_unpublished",
                             "loopback_gateway_port", "actual_agentic_settings_api_and_worker",
-                            "private_host_owned_receipt_access", "initializer_minimal_capabilities_and_secret_mounts"],
+                            "private_host_owned_receipt_access", "initializer_minimal_capabilities_and_secret_mounts",
+                            "selected_generation_alias_consistent", "standalone_gateway_contract"],
             "source_sha256": {name: hashlib.sha256(content).hexdigest() for name, content in source.items()},
             "container_execution": False, "model_inference": False, "credentials_redacted": True}
 
@@ -138,14 +175,15 @@ def check(compose: list[str]) -> dict:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--compose-binary", help="Optional standalone Docker Compose binary; defaults to docker compose")
+    parser.add_argument("--model", choices=("inkling", "qwen"), default="inkling")
     parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
     command = [args.compose_binary] if args.compose_binary else ["docker", "compose"]
     if shutil.which(command[0]) is None:
         raise SystemExit("Docker Compose is required; configuration was not verified")
     try:
-        report = check(command)
-    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
+        report = check(command, model=args.model)
+    except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError, subprocess.SubprocessError) as exc:
         report = {"schema_version": 1, "status": "failed", "error_type": type(exc).__name__,
                   "container_execution": False, "model_inference": False, "credentials_redacted": True}
     args.report.parent.mkdir(parents=True, exist_ok=True)

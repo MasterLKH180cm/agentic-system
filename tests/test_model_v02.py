@@ -11,6 +11,7 @@ import pytest
 
 from agentic.api import create_app
 from agentic.config import Settings
+from agentic.model import ModelGateway
 from agentic.store import BudgetExceeded
 from agentic.worker import Worker
 
@@ -68,6 +69,9 @@ def providers(monkeypatch, tmp_path):
     monkeypatch.setenv("AGENT_ARTIFACT_DIR", str(tmp_path / "artifacts"))
     monkeypatch.setenv("AGENT_TENANT_POLICIES_JSON", "{}")
     monkeypatch.setenv("AGENT_MODEL_PROVIDER", "offline")
+    # The fallback-success case explicitly budgets both complete schema prompts.
+    # Individual workflows retain their default or requested lower token ceiling.
+    monkeypatch.setenv("AGENT_MAX_MODEL_TOKENS", "16000")
     monkeypatch.setenv("FIXTURE_MODEL_KEY", "local-fixture-key")
     routes = [{"name": name, "provider": provider, "model": "fixture-model", "base_url": base + "/" + name,
                "api_key_env": "FIXTURE_MODEL_KEY", "purposes": ["planning", "synthesis"],
@@ -158,9 +162,10 @@ async def test_cost_budget_requires_configured_prices(providers):
     assert state["calls"] == []
 
 
-async def test_durable_planning_is_budgeted_and_idempotent(providers):
+@pytest.mark.parametrize("token_budget", [12000, 16000])
+async def test_durable_planning_is_budgeted_and_idempotent(providers, token_budget):
     client, store, _, tools, state = providers
-    payload = {"goal": "Calculate 6 * 7", "idempotency_key": "durable-plan"}
+    payload = {"goal": "Calculate 6 * 7", "idempotency_key": "durable-plan", "max_model_tokens": token_budget}
     result = client.post("/workflows", headers=HEADERS, json=payload)
     assert result.status_code == 202
     run_id = result.json()["id"]
@@ -169,6 +174,20 @@ async def test_durable_planning_is_budgeted_and_idempotent(providers):
     assert client.post("/workflows", headers=HEADERS, json=payload).json() == {"id": run_id, "duplicate": True}
     worker = Worker(store, tools)
     assert await worker.once() == 1
+    if token_budget == 12000:
+        assert await worker.once() == 0
+        run = store.get("local", run_id)
+        assert run["status"] == "failed" and len(run["steps"]) == 1
+        assert [call["path"] for call in state["calls"]] == ["/primary/chat/completions"]
+        request = state["calls"][0]["payload"]
+        reservation = (ModelGateway.input_units(request["messages"][0]["content"], request["messages"][1]["content"])
+                       + request["max_completion_tokens"])
+        usage = store.usage("local", run_id)
+        assert usage["charged_tokens"] == reservation
+        assert len(usage["calls"]) == 1 and usage["calls"][0]["status"] == "uncertain_http_error"
+        assert reservation <= token_budget < 2 * reservation
+        assert client.post("/workflows", headers=HEADERS, json=payload).json() == {"id": run_id, "duplicate": True}
+        return
     assert await worker.once() == 1
     run = store.get("local", run_id)
     assert run["status"] == "completed" and run["steps"][1]["result"]["value"] == 42

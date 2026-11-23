@@ -1,0 +1,21 @@
+{
+  "schema_version": "model-deployment-v1",
+  "source": "operator_supplied",
+  "runtime_name": "llama.cpp",
+  "runtime_version": "b12631",
+  "runtime_revision": "e300919cc704ddde3a8a8346a8714f57eeeee71b",
+  "model_repository": "Qwen/Qwen3-1.7B-GGUF",
+  "model_revision": "90862c4b9d2787eaed51d12237eafdfe7c5f6077",
+  "model_artifact": "Qwen3-1.7B-Q8_0.gguf",
+  "model_sha256": "061b54daade076b5d3362dac252678d17da8c68f07560be70818cace6590cb1a",
+  "model_bytes": 1834426016,
+  "quantization": "Q8_0",
+  "context_tokens": 4096,
+  "server_parallel_slots": 1,
+  "server_threads": 8,
+  "hardware_class": "cpu",
+  "hardware_label": "x86_64",
+  "host_memory_bytes": 10451423232,
+  "accelerator_count": 0,
+  "accelerator_memory_bytes": 0
+}

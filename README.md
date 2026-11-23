@@ -556,6 +556,25 @@ remain available. Follow the guide for bootstrap, Prisma preparation and the
 direct/proxy comparison; synthetic upstream fixtures establish transport
 behavior, not Inkling inference quality or speed.
 
+For Qwen3-1.7B Q8_0, select `bootstrap_litellm.py --model qwen` in a new
+deployment and apply `compose.qwen.yaml` last. The [Qwen gateway contract](docs/QWEN_GATEWAY_SPEC.md)
+uses its own `gateway/qwen3-1.7b-q8_0-v1` alias and service-key scope. The
+[planner contract](docs/QWEN_PLANNER_SPEC.md) supplies permitted tool argument
+schemas without truncating JSON. `scripts/check_qwen_live.py` runs actual local
+Qwen inference through independent RAG/API/worker processes, PostgreSQL/pgvector,
+the TLS gateway, and direct/gateway benchmarks; it requires preverified weights,
+a pinned server and an explicitly disposable PostgreSQL administrator endpoint.
+
+The supplied Qwen routes explicitly enable `supports_json_schema`. This
+capability is otherwise off and requires support on every effective fallback
+route. The [structured-output contract](docs/QWEN_STRUCTURED_OUTPUT_SPEC.md)
+accounts for schema bytes before requests, preserves reported usage on rejected
+outputs, and retains local planning, citation and numeric validation. Opted-in
+synthesis uses `synthesis-text-v1`: the model produces prose and selects source
+IDs; the application always preserves that prose and renders the selected
+references. It never chooses missing citations or repairs malformed output.
+The external answer envelope and offline behavior remain unchanged.
+
 ## PostgreSQL concurrency and storage measurement
 
 The [v0.5 architecture](docs/ARCHITECTURE.md) uses a bounded process-local pool,

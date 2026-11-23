@@ -1,0 +1,14 @@
+{
+  "schema_version": "admission-attempt-v1",
+  "observed_at": "2026-11-23T11:25:35.488119+00:00",
+  "status": "execution_timeout",
+  "enforced_timeout_seconds": 1800,
+  "last_observed_progress": {
+    "stage": "generate_true/temporal",
+    "completed": 20,
+    "total": 28
+  },
+  "complete_verification_report_written": false,
+  "quality_result": null,
+  "note": "The operator wrapper deadline expired before the final report. This attempt is not counted as a complete replay or a quality failure; a longer bounded replay follows."
+}

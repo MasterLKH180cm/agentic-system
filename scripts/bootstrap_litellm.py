@@ -15,6 +15,12 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 ALIAS = "gateway/inkling-2-mini-iq4nl-v1"
+PRESETS = {
+    "inkling": {"alias": ALIAS, "model": "thinkingmachines/Inkling-2-Mini",
+                "deployment": "inkling-2-mini-iq4nl-v1", "prefix": "INKLING"},
+    "qwen": {"alias": "gateway/qwen3-1.7b-q8_0-v1", "model": "qwen/Qwen3-1.7B",
+             "deployment": "qwen3-1.7b-q8_0-v1", "prefix": "QWEN"},
+}
 
 
 def write(path: Path, content: str, mode=0o600):
@@ -24,7 +30,10 @@ def write(path: Path, content: str, mode=0o600):
         output.write(content)
 
 
-def create(directory: Path, upstream_url="http://host.docker.internal:8080/v1") -> list[str]:
+def create(directory: Path, upstream_url="http://host.docker.internal:8080/v1", *, model="inkling") -> list[str]:
+    if not isinstance(model, str) or model not in PRESETS:
+        raise ValueError("Unknown gateway model preset")
+    preset = PRESETS[model]
     parsed = urlsplit(upstream_url)
     if (parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password
             or parsed.query or parsed.fragment or "\n" in upstream_url or "\r" in upstream_url):
@@ -48,17 +57,28 @@ def create(directory: Path, upstream_url="http://host.docker.internal:8080/v1") 
             # directory, read-only, and runs under its existing container UID.
             write(directory / service / "api.key", "sk-" + secrets.token_urlsafe(40) + "\n", 0o644)
         write(directory / "db.env", "POSTGRES_USER=litellm\nPOSTGRES_DB=litellm\nPOSTGRES_PASSWORD=" + password + "\n")
-        write(directory / "admin.env", "LITELLM_MASTER_KEY=" + master + "\n")
-        write(directory / "upstream.env", "INKLING_UPSTREAM_API_KEY=" + upstream + "\n")
+        admin = "LITELLM_MASTER_KEY=" + master + "\n"
+        if model != "inkling":
+            admin += "LITELLM_MODEL_ALIAS=" + preset["alias"] + "\n"
+        write(directory / "admin.env", admin)
+        prefix = preset["prefix"]
+        write(directory / "upstream.env", prefix + "_UPSTREAM_API_KEY=" + upstream + "\n")
         write(directory / "upstream.key", upstream + "\n")
         write(directory / "proxy.env", "\n".join([
             "LITELLM_MASTER_KEY=" + master, "LITELLM_SALT_KEY=" + salt,
             "DATABASE_URL=postgresql://litellm:" + password + "@litellm-db:5432/litellm",
-            "INKLING_UPSTREAM_API_BASE=" + upstream_url.rstrip("/"), "INKLING_UPSTREAM_API_KEY=" + upstream,
+            prefix + "_UPSTREAM_API_BASE=" + upstream_url.rstrip("/"), prefix + "_UPSTREAM_API_KEY=" + upstream,
             "LITELLM_LOCAL_MODEL_COST_MAP=True", "LITELLM_TELEMETRY=False", "DO_NOT_TRACK=1",
             "LITELLM_LOG=ERROR", "STORE_MODEL_IN_DB=False", "",
         ]))
-        write(directory / "proxy.yaml", (ROOT / "deploy/litellm/proxy.yaml").read_text(), 0o644)
+        proxy = (ROOT / "deploy/litellm/proxy.yaml").read_text()
+        if model != "inkling":
+            proxy = (proxy.replace(ALIAS, preset["alias"])
+                     .replace("thinkingmachines/Inkling-2-Mini", preset["model"])
+                     .replace("inkling-2-mini-iq4nl-v1", preset["deployment"])
+                     .replace("INKLING_UPSTREAM_", prefix + "_UPSTREAM_")
+                     .replace("Real Inkling", "Real Qwen"))
+        write(directory / "proxy.yaml", proxy, 0o644)
         commands = [
             ["req", "-x509", "-newkey", "rsa:3072", "-nodes", "-days", "365", "-sha256",
              "-subj", "/CN=RAG Agentic Private Gateway CA", "-keyout", "ca.key", "-out", "ca.pem",
@@ -79,12 +99,14 @@ def create(directory: Path, upstream_url="http://host.docker.internal:8080/v1") 
             (directory / filename).chmod(0o644)
         for service in ("rags", "agentic"):
             write(directory / service / "ca.pem", (directory / "ca.pem").read_text(), 0o644)
-        routes = [{"name": "inkling-gateway-v1", "provider": "openai", "model": ALIAS,
+        routes = [{"name": model + "-gateway-v1", "provider": "openai", "model": preset["alias"],
                    "base_url": "https://litellm:4000/v1", "api_key_env": "AGENT_GATEWAY_API_KEY",
                    "ca_file": "/app/gateway/ca.pem", "auth_mode": "required",
                    "output_token_parameter": "max_tokens", "purposes": ["planning", "synthesis"]}]
+        if model == "qwen":
+            routes[0]["supports_json_schema"] = True
         write(directory / "routes.json", json.dumps(routes, indent=2) + "\n", 0o644)
-        write(directory / "manifest.json", json.dumps({"schema_version": 1, "model_alias": ALIAS,
+        write(directory / "manifest.json", json.dumps({"schema_version": 1, "model_alias": preset["alias"],
               "gateway_version": "1.110.2", "upstream_endpoint_configured": True,
               "inference_executed": False, "tls_server_valid_days": 90}, indent=2) + "\n", 0o644)
         for filename in ("server.csr", "server.ext", "ca.srl"):
@@ -99,9 +121,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--directory", type=Path, default=ROOT / "data/litellm")
     parser.add_argument("--upstream-url", default="http://host.docker.internal:8080/v1")
+    parser.add_argument("--model", choices=tuple(PRESETS), default="inkling")
     args = parser.parse_args()
     try:
-        names = create(args.directory.absolute(), args.upstream_url)
+        names = create(args.directory.absolute(), args.upstream_url, model=args.model)
     except (OSError, ValueError, subprocess.SubprocessError):
         raise SystemExit("Gateway configuration was not created; check the target path, URL and OpenSSL") from None
     print(f"Created {len(names)} gateway configuration files. No model was downloaded or called.")

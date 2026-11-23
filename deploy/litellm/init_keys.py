@@ -18,6 +18,7 @@ import urllib.parse
 import httpx
 
 ALIAS = "gateway/inkling-2-mini-iq4nl-v1"
+MODEL_ALIASES = (ALIAS, "gateway/qwen3-1.7b-q8_0-v1")
 ROUTES = ["/chat/completions", "/v1/chat/completions", "/models", "/v1/models"]
 
 
@@ -82,7 +83,9 @@ def request(base: str, path: str, master: str, context: ssl.SSLContext, payload=
     return asyncio.run(bounded())
 
 
-def provision(directory: Path, base: str, master: str) -> None:
+def provision(directory: Path, base: str, master: str, *, model_alias: str = ALIAS) -> None:
+    if model_alias not in MODEL_ALIASES:
+        raise ValueError("Unsupported generation deployment alias")
     parsed = urllib.parse.urlsplit(base)
     if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
             or parsed.query or parsed.fragment or parsed.path not in {"", "/"}):
@@ -100,7 +103,7 @@ def provision(directory: Path, base: str, master: str) -> None:
         receipt = directory / (service + ".provisioned.json")
         key_hash = hashlib.sha256(key.encode()).hexdigest()
         expected_receipt = {"schema_version": 1, "service": service, "key_sha256": key_hash,
-                            "model": ALIAS, "allowed_routes": ROUTES}
+                            "model": model_alias, "allowed_routes": ROUTES}
         if receipt.is_symlink():
             raise ProvisionError("Provisioning receipt cannot be a symlink")
         if receipt.exists() and (not receipt.is_file() or receipt.stat().st_size > 4096
@@ -116,7 +119,7 @@ def provision(directory: Path, base: str, master: str) -> None:
             if receipt.exists() or receipt.is_symlink():
                 raise ProvisionError("Previously provisioned key is absent; explicit operator repair is required")
             request(base.rstrip("/"), "/key/generate", master, context, {
-                "key": key, "key_alias": service + "-generation-v1", "models": [ALIAS],
+                "key": key, "key_alias": service + "-generation-v1", "models": [model_alias],
                 # key_type=llm_api expands to all inference APIs in 1.110.2 and
                 # would overwrite this narrower explicit endpoint allowlist.
                 "allowed_routes": ROUTES,
@@ -126,7 +129,7 @@ def provision(directory: Path, base: str, master: str) -> None:
         expires = info.get("expires") if isinstance(info, dict) else None
         if (not isinstance(info, dict) or info.get("status") != "active"
                 or (info.get("blocked") is not None and info.get("blocked") is not False) or expired(expires)
-                or info.get("models") != [ALIAS] or set(info.get("allowed_routes") or []) != set(ROUTES)
+                or info.get("models") != [model_alias] or set(info.get("allowed_routes") or []) != set(ROUTES)
                 or any(info.get(field) for field in ("aliases", "config", "router_settings"))
                 or info.get("metadata") != {"service": service, "deployment_contract": "generation-v1"}):
             raise ProvisionError("Existing service key has a different or blocked policy; explicit repair is required")
@@ -138,9 +141,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--directory", type=Path, default=Path("/bootstrap"))
     parser.add_argument("--base-url", default="https://litellm:4000")
+    parser.add_argument("--model-alias", choices=MODEL_ALIASES,
+                        default=os.environ.get("LITELLM_MODEL_ALIAS", ALIAS))
     args = parser.parse_args()
     try:
-        provision(args.directory, args.base_url, os.environ.get("LITELLM_MASTER_KEY", ""))
+        provision(args.directory, args.base_url, os.environ.get("LITELLM_MASTER_KEY", ""),
+                  model_alias=args.model_alias)
     except (OSError, ValueError, KeyError, TypeError, ProvisionError, TimeoutError, httpx.HTTPError):
         # Management errors can contain key/DSN data. Never print their bodies.
         raise SystemExit("Gateway key initialization failed; inspect configuration and administrative key status") from None

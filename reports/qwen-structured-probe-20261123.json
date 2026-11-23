@@ -1,0 +1,38 @@
+{
+  "schema_version": "qwen-structured-probe-v1",
+  "requests": [
+    {
+      "path": "direct",
+      "status_code": 200,
+      "elapsed_seconds": 5.031635322000511,
+      "output": "{\n  \"steps\": [\n    {\n      \"id\": \"search_retention\",\n      \"tool\": \"rag.search\",\n      \"args\": {\n        \"question\": \"Search for sample retention policy with top_k 2\",\n        \"top_k\": 2\n      },\n      \"depends_on\": []\n    }\n  ]\n}",
+      "valid": true,
+      "usage": {
+        "completion_tokens": 73,
+        "prompt_tokens": 48,
+        "total_tokens": 121,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "finish_reason": "stop"
+    },
+    {
+      "path": "gateway",
+      "status_code": 200,
+      "elapsed_seconds": 4.6937235000004875,
+      "output": "{\n  \"steps\": [\n    {\n      \"id\": \"search_retention\",\n      \"tool\": \"rag.search\",\n      \"args\": {\n        \"question\": \"Search for sample retention policy with top_k 2\",\n        \"top_k\": 2\n      },\n      \"depends_on\": []\n    }\n  ]\n}",
+      "valid": true,
+      "usage": {
+        "completion_tokens": 73,
+        "prompt_tokens": 48,
+        "total_tokens": 121,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "status": "passed"
+}

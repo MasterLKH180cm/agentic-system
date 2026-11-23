@@ -1,0 +1,104 @@
+{
+  "schema_version": "qwen-core-verification-v1",
+  "status": "passed",
+  "scope": "CI unit, ordinary integration, and actual PostgreSQL/Redis; model inference and S3 are separate",
+  "started_at": "2026-11-23T12:20:37.552+00:00",
+  "finished_at": "2026-11-23T12:21:57.809+00:00",
+  "elapsed_seconds": 80.257,
+  "model_inference_executed": false,
+  "collected_tests": 939,
+  "distinct_executed_tests": 938,
+  "unexecuted_local_tests": [
+    "tests/test_platform.py::test_real_s3_artifacts_are_isolated_and_integrity_checked"
+  ],
+  "phases": [
+    {
+      "name": "unit",
+      "selector": "unit",
+      "exit_status": 0,
+      "elapsed_seconds": 6.746,
+      "junit": {
+        "tests": 506,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "integration",
+      "selector": "integration and not external",
+      "exit_status": 0,
+      "elapsed_seconds": 64.511,
+      "junit": {
+        "tests": 413,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "external-pg-redis",
+      "selector": "external and (postgres or redis)",
+      "exit_status": 0,
+      "elapsed_seconds": 8.419,
+      "junit": {
+        "tests": 19,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    }
+  ],
+  "coverage_gate": {
+    "scope": "complete production Python package; ordinary parent-process unit+integration",
+    "files": 24,
+    "line_percent": 90.74126668560068,
+    "branch_percent": 84.68660968660969,
+    "minimum_lines": 85,
+    "minimum_branches": 75,
+    "passed": true
+  },
+  "source_unchanged": true,
+  "verification_source_manifest_sha256": "e8e37be28ca9726e357d76544cef73d528351adb359b98e7a50476551b397394",
+  "source_sha256": {
+    "agentic/__init__.py": "93cbba17866ad838ede59bc1e0d1a8c27b98a4f6a824dbe2aedf53fd40141d60",
+    "agentic/admission.py": "d7151298e10ab40f673478ac8a711aa1316f9143bd83981c3e303088aa3d0a12",
+    "agentic/api.py": "394ed1f95776728fdceac62f62606e28c87064c9dab5ae658dfae5c3fc9c493c",
+    "agentic/async_io.py": "87dc9cf410a1aa1df018520678740e4e249b30691a9dfa01c23e1607b99c0854",
+    "agentic/auth.py": "ec5e56cf818a74ef14dcead7862d17d401fc7aaaf00ec30354413b21c0de03c5",
+    "agentic/config.py": "ed32875331cb4aecf567d8017a3d6ecb0a23eeb29df7fc05d06097a947e3aec5",
+    "agentic/control.py": "c5727da65ef98281bc302966b2346af7dabdf529c834777073c64624265b0b91",
+    "agentic/evidence.py": "1626d329d7c3a7eef03f8e1123181cdddcba7a010b084ea02eb81c6ceb47ace6",
+    "agentic/features.py": "a4bf8d7d7e711b61e7d79bae28f73196b71b7fa4b3f52d0faaa6e4ec7e842744",
+    "agentic/interfaces.py": "e8013046cfe5cf1aff64f23f962e9dd29d9157f9b383ea4201338d1a7447af51",
+    "agentic/limits.py": "ee20a69c4c3057e5c2e4b9bb245dd42b1b5ebd597007a5c9b0a46209598059de",
+    "agentic/mcp_server.py": "6b6e72a80f6ed86d339d22691a295304142c77dd98fae0ddfb06224d7d98a6fb",
+    "agentic/memory.py": "6ce10dfcfe96c1cb8e4cb2ecace8ed39f487b62d9e04e0924213722620081d6e",
+    "agentic/model.py": "3584d449ca390a10e93a057313dd6458f874f1cc80de9700e85d45185fbb1a56",
+    "agentic/pgpool.py": "ecbbc74ca4af88d695fbbab5e7e67e7523aa8f641c3c556d86cdef535fc10fde",
+    "agentic/planner.py": "b34a39ad1b470233e74c3e0d854cf87610918945b99644b44c855055742263a0",
+    "agentic/postgres.py": "b0cf5b77b4374d35018870aff1c52df96bb441550a923fe7b649c51a9f2fd4a7",
+    "agentic/runtime.py": "3df7b76120772bdff5206f59fbf88380177f00adb7b987d264205002411ef1c2",
+    "agentic/schemas.py": "12ad58caa4bb4524d7996ae9bac52ac44a48688540adf82097fbf39cc5b7d783",
+    "agentic/static/index.html": "0a9de800e35c8589261b26c3711ccdc30f5f59303c922c9bffe7d811470822a9",
+    "agentic/storage_adapters.py": "2fa864206bdf9d22d7c33564b46394a61010391c9498d6183076ecdd5aeb9281",
+    "agentic/store.py": "f3b70b2a2a81d777549295b95f7f3596fc882ce46357c3ddd9c5b842d4678cec",
+    "agentic/telemetry.py": "b888b2c9794394e954944e3feab128c411485d56baec426c68073393cd525b4e",
+    "agentic/tools.py": "a3cf2133ea9ee656290e7679fa25fd046a6981ab095dbb0cc0d2b6d3ec5edae5",
+    "agentic/worker.py": "6828a5d6d38ec42d5d48ab8f8cea9b58354c2a6971c10e5c1db71e54eeb8bd76"
+  },
+  "evidence_sha256": {
+    "coverage-core.json": "407d98184b44ddee6965f81baae7e1d946875fc1bbcc20b1ba2fb478a53f844c",
+    "coverage-core.xml": "95b29a24bded16426ba233ad762afa4023439494004d2c487635588e3a618372",
+    "coverage-gate.json": "b536282116102d8c2a595d6f011f92b237aba845548a336c52c73338ad315d90",
+    "coverage-unit.json": "ab1261816ff1e7f65b1361b6f4c952ebc0d65cecdce5d13455601e44174d6ac2",
+    "inventory-external-pg-redis.json": "4771050fa41472a5c54267c5d53ab39ba6528ef57f91a42b5ed25e9d8e9069fe",
+    "inventory-integration.json": "98f55959b92bf2433650084e2045650f8ffb309ff7a8a998d34af4ebca1000eb",
+    "inventory-unit.json": "423b25e47f0229cab0d019ac2001a3820d3dccf873ae27c6454456094604682a",
+    "junit-external-pg-redis.xml": "f6265a861e9199768cec7e78253656fd0d72d43c4bfb7bffb1dafb1c8dcd483d",
+    "junit-integration.xml": "16f0de4d4352bd7e317dd3c1921bc14cfab11fbec6af3ef764f2b7cd92466e66",
+    "junit-unit.xml": "211a349544818c57325edec23ec0ac71a95f6f69f780ded4f8d269230de3e2c7",
+    "source-manifest.json": "4daaef4b49393cfb40331ce2ba2c17c3617946d99eb88bc55307f33c572d2741",
+    "summary.json": "c20a34f5f49c57c6f3c2fddb2578b80f86b48cfe59f67269a23f7917991fd75d"
+  }
+}

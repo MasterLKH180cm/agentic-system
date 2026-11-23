@@ -99,8 +99,13 @@ class ModelRoute:
     auth_mode: str = "required"
     output_token_parameter: str | None = None
     ca_file: str | None = None
+    supports_json_schema: bool = False
 
     def __post_init__(self):
+        if type(self.supports_json_schema) is not bool:
+            raise ValueError("supports_json_schema must be boolean")
+        if self.supports_json_schema and self.provider != "openai":
+            raise ValueError("JSON schema output requires an OpenAI-compatible route")
         validate_reasoning_effort(self.reasoning_effort)
         if self.reasoning_effort is not None and self.provider != "openai":
             raise ValueError("reasoning_effort requires an OpenAI-compatible route")
@@ -142,7 +147,7 @@ def model_routes(
         if not isinstance(entry, dict) or set(entry) - {
             "name", "provider", "model", "base_url", "api_key_env", "purposes",
             "input_cost_per_million", "output_cost_per_million", "preset", "reasoning_effort",
-            "auth_mode", "output_token_parameter", "ca_file",
+            "auth_mode", "output_token_parameter", "ca_file", "supports_json_schema",
         }:
             raise ValueError("Invalid model route fields")
         preset = entry.get("preset")
@@ -190,7 +195,7 @@ def model_routes(
         # Validate transport and auth before reading any credential. In particular,
         # local no-auth routes must never load ambient hosted-provider secrets.
         route = ModelRoute(name, kind, model, base, "", tuple(purposes), *prices, effort,
-                           auth_mode, token_parameter, entry.get("ca_file"))
+                           auth_mode, token_parameter, entry.get("ca_file"), entry.get("supports_json_schema", False))
         key = ""
         if require_credentials and auth_mode == "required":
             if key_env:
