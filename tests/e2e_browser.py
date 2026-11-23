@@ -288,6 +288,118 @@ def run_submission_polish(page, services, report, artifacts):
                              "storage_empty_while_pending": True, "fresh_after_reload": True})
 
 
+def stream_failure_checkpoint(services, run_ids, faults, stage):
+    """Bounded synthetic state, captured before teardown without result bodies."""
+    checkpoint = {"stage": stage, "workflows": {}, "gates": {}}
+    with services.proxy.lock:
+        checkpoint["gates"] = {name: {"calls": fault.calls, "forwarded": fault.forwarded,
+                                       "finished": fault.finished, "released": fault.release.is_set()}
+                               for name, fault in faults.items()}
+
+    def label(value):
+        return value[:120] if isinstance(value, str) else None
+
+    for name, run_id in run_ids.items():
+        snapshot = checkpoint["workflows"][name] = {"id": run_id}
+        try:
+            response = services.client.get(services.agent_url + "/workflows/" + run_id,
+                                           headers={"Authorization": "Bearer " + services.key}, timeout=1)
+            snapshot["http_status"] = response.status_code
+            if response.status_code != 200:
+                continue
+            state = response.json()
+            require(isinstance(state, dict) and state.get("id") == run_id
+                    and isinstance(state.get("steps"), list), "Invalid diagnostic workflow state")
+            snapshot.update(status=label(state.get("status")), step_count=len(state["steps"]), steps=[
+                {"id": label(step.get("id")), "tool": label(step.get("tool")),
+                 "status": label(step.get("status")),
+                 "attempts": step.get("attempts") if type(step.get("attempts")) is int else None}
+                for step in state["steps"][:8]
+            ])
+        except Exception as error:  # noqa: BLE001 - Best-effort diagnostics must preserve the original failure.
+            snapshot["error_type"] = type(error).__name__
+    return checkpoint
+
+
+def run_stream_ownership(page, services, report, artifacts):
+    from playwright.sync_api import expect
+
+    first_goal = "What is the session timeout for the first browser stream?"
+    second_goal = "What is the session timeout for the second browser stream?"
+    faults = {"first": services.proxy.fault(first_goal, hold_requests=1),
+              "second": services.proxy.fault(second_goal, hold_requests=1)}
+    run_ids = {}
+    stage = "first_stream"
+    try:
+        page.locator("#token").fill(services.key)
+        first = run_ids["first"] = submit(page, first_goal)
+        eventually(lambda: faults["first"].forwarded == 1, description="real first browser RAG request")
+        follow(page, services, first)
+        expect(page.locator("#events")).to_contain_text('"type": "started"')
+        page.locator("#stop").click()
+        expect(page.locator("#stream")).to_be_enabled()
+        cursor = re.findall(r"^id: (\d+)$", page.locator("#events").inner_text(), re.MULTILINE)[-1]
+        follow(page, services, first, cursor=cursor)
+        expect(page.locator("#stream")).to_be_disabled()
+
+        stage = "switch_workflow"
+        second = run_ids["second"] = submit(page, second_goal)
+        # Old UI left the first stream open and this button disabled indefinitely.
+        expect(page.locator("#stream")).to_be_enabled(timeout=3000)
+        expect(page.locator("#events")).to_have_text("")
+        follow(page, services, second)
+        expect(page.locator("#events")).to_contain_text(second)
+        faults["first"].release.set()
+        # SKIP LOCKED may give the sole worker the newer held retrieval before
+        # the older synthesis. Its durable retrieval checkpoint is sufficient
+        # here; waiting for the whole first run would prevent releasing second.
+        eventually(lambda: any(step["tool"] == "rag.search" and step["status"] == "completed"
+                               for step in services.state(first)["steps"]),
+                   description="released first browser retrieval checkpoint")
+        eventually(lambda: faults["second"].forwarded == 1, description="real second browser RAG request")
+        expect(page.locator("#events")).to_contain_text('"type": "started"')
+        require(all(event["run_id"] == second for event in displayed_events(page)), "Late prior events polluted the new view")
+        page.locator("#run").fill(first)
+        expect(page.locator("#stream")).to_be_enabled()
+        follow(page, services, first)
+        expect(page.locator("#events")).to_contain_text('"type": "started"')
+        require(all(event["run_id"] == first for event in displayed_events(page)), "Returning to first mixed workflow events")
+        page.locator("#run").fill(second)
+        follow(page, services, second)
+        expect(page.locator("#events")).to_contain_text('"type": "started"')
+
+        stage = "switch_credential"
+        require(not faults["second"].release.is_set(), "Second response was released before ownership checks")
+        page.locator("#token").fill(services.approver)
+        expect(page.locator("#stream")).to_be_enabled()
+        expect(page.locator("#events")).to_have_text("")
+        follow(page, services, second, token=services.approver)
+
+        stage = "released_terminal_workflows"
+        faults["second"].release.set()
+        require(all(fault.release.is_set() for fault in faults.values()), "Terminal wait retained a browser response hold")
+        require(services.finish(first)["status"] == "completed", "Released prior workflow did not finish")
+        require(services.finish(second)["status"] == "completed", "Second browser workflow failed")
+        events = await_terminal_stream(page, second)
+        require(events == services.events(second), "Credential-owned stream differs from durable backend events")
+        screenshot(page, artifacts, report, "stream-isolation.png")
+        page.locator("#run").fill(first)
+        follow(page, services, first, token=services.approver)
+        first_events = await_terminal_stream(page, first)
+        require(first_events == services.events(first), "Prior terminal stream differs from durable backend events")
+        report["checks"].append({"id": EXPECTED[4], "passed": True, "same_run_cursor_reused": True,
+                                 "cross_run_cursor_reused": False, "credential_change_aborts": True,
+                                 "old_events_in_new_view": 0, "released_before_terminal_wait": True,
+                                 "terminal_workflows_verified": 2})
+        return first, second
+    except BaseException:
+        try:
+            report["stream_failure_checkpoint"] = stream_failure_checkpoint(services, run_ids, faults, stage)
+        except Exception as error:  # noqa: BLE001 - A diagnostic fault must not replace the browser assertion.
+            report["stream_failure_checkpoint"] = {"stage": stage, "capture_error_type": type(error).__name__}
+        raise
+
+
 def run(page, services, report, artifacts):
     from playwright.sync_api import expect
 
@@ -364,51 +476,7 @@ def run(page, services, report, artifacts):
     screenshot(page, artifacts, report, "approved-publication.png")
     report["checks"].append({"id": EXPECTED[3], "passed": True, "requester_rejected": True, "artifact_value": 42})
 
-    page.locator("#token").fill(services.key)
-    first_goal = "What is the session timeout for the first browser stream?"
-    second_goal = "What is the session timeout for the second browser stream?"
-    first_fault = services.proxy.fault(first_goal, hold_requests=1)
-    second_fault = services.proxy.fault(second_goal, hold_requests=1)
-    first = submit(page, first_goal)
-    eventually(lambda: first_fault.forwarded == 1, description="real first browser RAG request")
-    follow(page, services, first)
-    expect(page.locator("#events")).to_contain_text('"type": "started"')
-    page.locator("#stop").click()
-    expect(page.locator("#stream")).to_be_enabled()
-    cursor = re.findall(r"^id: (\d+)$", page.locator("#events").inner_text(), re.MULTILINE)[-1]
-    follow(page, services, first, cursor=cursor)
-    expect(page.locator("#stream")).to_be_disabled()
-
-    second = submit(page, second_goal)
-    # Old UI left the first stream open and this button disabled indefinitely.
-    expect(page.locator("#stream")).to_be_enabled(timeout=3000)
-    expect(page.locator("#events")).to_have_text("")
-    follow(page, services, second)
-    expect(page.locator("#events")).to_contain_text(second)
-    first_fault.release.set()
-    require(services.finish(first)["status"] == "completed", "Released prior workflow did not finish")
-    eventually(lambda: second_fault.forwarded == 1, description="real second browser RAG request")
-    expect(page.locator("#events")).to_contain_text('"type": "started"')
-    require(all(event["run_id"] == second for event in displayed_events(page)), "Late prior events polluted the new view")
-    page.locator("#run").fill(first)
-    expect(page.locator("#stream")).to_be_enabled()
-    follow(page, services, first)
-    await_terminal_stream(page, first)
-    page.locator("#run").fill(second)
-    follow(page, services, second)
-    expect(page.locator("#events")).to_contain_text('"type": "started"')
-    page.locator("#token").fill(services.approver)
-    expect(page.locator("#stream")).to_be_enabled()
-    expect(page.locator("#events")).to_have_text("")
-    follow(page, services, second, token=services.approver)
-    second_fault.release.set()
-    require(services.finish(second)["status"] == "completed", "Second browser workflow failed")
-    events = await_terminal_stream(page, second)
-    require(events == services.events(second), "Credential-owned stream differs from durable backend events")
-    screenshot(page, artifacts, report, "stream-isolation.png")
-    report["checks"].append({"id": EXPECTED[4], "passed": True, "same_run_cursor_reused": True,
-                             "cross_run_cursor_reused": False, "credential_change_aborts": True,
-                             "old_events_in_new_view": 0})
+    first, second = run_stream_ownership(page, services, report, artifacts)
 
     # Buffer genuine API responses at the browser transport, without mocking
     # service behavior, so view changes occur before an older fetch resolves.

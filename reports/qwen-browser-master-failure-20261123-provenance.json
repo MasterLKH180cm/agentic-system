@@ -1,0 +1,20 @@
+{
+  "schema_version": "browser-stream-ci-failure-provenance-v1",
+  "retrieved_at": "2026-11-23T13:26:36.626525+00:00",
+  "repository": "MasterLKH180cm/agentic-system",
+  "source_commit": "17273ada52932bda9a14229c4d2f2c1d3d377e0e",
+  "source_tree": "04961dfa471c18e40b31a51f1f7df85d4bfd7e29",
+  "run_id": 45182395133,
+  "job_id": 137719223627,
+  "job_url": "https://github.com/MasterLKH180cm/agentic-system/actions/runs/45182395133/job/137719223627",
+  "artifact_id": 14821547906,
+  "artifact_zip_sha256": "8497b6c5af5725af06eee2dc6f3ef36936be4801524b9b37090beeeca6f9f896",
+  "report_path": "reports/qwen-browser-master-failure-20261123.json",
+  "report_sha256": "78f14320848c002bf54e553270486cdca1843f55585ca7b72b64ca4dbedf5431",
+  "completed_checks": 4,
+  "expected_checks": 12,
+  "browser_version": "151.0.7922.34",
+  "classification": "failure in the stream-ownership fixture while awaiting the older workflow before releasing the newer held response",
+  "evidence_limit": "The original failure report did not include workflow step snapshots. Its HTTP logs are consistent with the reviewed scheduling counterexample but do not uniquely identify which transaction held a row lock.",
+  "model_measurements_reexecuted": false
+}
