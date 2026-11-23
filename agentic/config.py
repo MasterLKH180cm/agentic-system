@@ -1,15 +1,19 @@
 """Configuration. Production requires explicit tenant-scoped credentials."""
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
+import ipaddress
 import json
 import math
 import os
 from pathlib import Path
+import re
 from urllib.parse import urlparse
 
 from agentic.features import Features
 
 INKLING_MODEL = "thinkingmachines/Inkling-2-Mini"
 INKLING_BASE_URL = "https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1"
+INKLING_LOCAL_BASE_URL = "http://127.0.0.1:8080/v1"
 REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh", "max"}
 
 
@@ -33,6 +37,30 @@ def secret(name: str) -> str:
     return value
 
 
+def validate_model_endpoint(base: str, *, unauthenticated: bool = False) -> None:
+    if (not isinstance(base, str) or not base or len(base) > 2048
+            or any(char.isspace() or ord(char) < 32 for char in base)):
+        raise ValueError("Invalid model route endpoint")
+    try:
+        parsed = urlparse(base)
+        port = parsed.port
+        if (parsed.scheme not in {"http", "https"} or not parsed.hostname
+                or parsed.username is not None or parsed.password is not None
+                or "?" in base or "#" in base or port == 0):
+            raise ValueError("Invalid model route endpoint")
+    except ValueError:
+        raise ValueError("Invalid model route endpoint") from None
+    if unauthenticated:
+        try:
+            address = ipaddress.ip_address(parsed.hostname)
+            loopback = ("%" not in parsed.hostname and address.is_loopback
+                        and getattr(address, "ipv4_mapped", None) is None)
+        except ValueError:
+            loopback = False
+        if not loopback:
+            raise ValueError("Unauthenticated model routes require a literal loopback endpoint")
+
+
 @dataclass(frozen=True)
 class ModelRoute:
     name: str
@@ -44,16 +72,31 @@ class ModelRoute:
     input_cost_per_million: float | None = None
     output_cost_per_million: float | None = None
     reasoning_effort: str | float | None = None
+    auth_mode: str = "required"
+    output_token_parameter: str | None = None
 
     def __post_init__(self):
         validate_reasoning_effort(self.reasoning_effort)
         if self.reasoning_effort is not None and self.provider != "openai":
             raise ValueError("reasoning_effort requires an OpenAI-compatible route")
+        if self.auth_mode not in ("required", "none"):
+            raise ValueError("Model route auth_mode must be required or none")
+        if not isinstance(self.api_key, str):
+            raise ValueError("Invalid model route API key")
+        if self.auth_mode == "none" and (self.provider != "openai" or self.api_key):
+            raise ValueError("Unauthenticated routes require OpenAI-compatible transport and no API key")
+        validate_model_endpoint(self.base_url, unauthenticated=self.auth_mode == "none")
+        if self.output_token_parameter is not None and (
+            self.provider != "openai" or self.output_token_parameter not in ("max_tokens", "max_completion_tokens")
+        ):
+            raise ValueError("Invalid OpenAI-compatible output_token_parameter")
 
 
 def model_routes(
-    provider: str, openai_key: str, anthropic_key: str, *, require_credentials: bool = True,
+    provider: str, openai_key: str | None = None, anthropic_key: str | None = None, *,
+    require_credentials: bool = True, credential_loader: Callable[[str], str] | None = None,
 ) -> tuple[ModelRoute, ...]:
+    load_credential = credential_loader or secret
     raw = os.getenv("AGENT_MODEL_ROUTES_JSON")
     if raw:
         entries = json.loads(raw)
@@ -70,40 +113,37 @@ def model_routes(
         if not isinstance(entry, dict) or set(entry) - {
             "name", "provider", "model", "base_url", "api_key_env", "purposes",
             "input_cost_per_million", "output_cost_per_million", "preset", "reasoning_effort",
+            "auth_mode", "output_token_parameter",
         }:
             raise ValueError("Invalid model route fields")
         preset = entry.get("preset")
-        if preset is not None and (not isinstance(preset, str) or preset != "inkling"):
+        if preset is not None and preset not in ("inkling", "inkling-local"):
             raise ValueError("Unknown model route preset")
-        kind = entry.get("provider", "openai" if preset == "inkling" else provider)
-        if preset == "inkling" and kind != "openai":
+        kind = entry.get("provider", "openai" if preset is not None else provider)
+        if preset is not None and kind != "openai":
             raise ValueError("Inkling preset requires an OpenAI-compatible route")
         if kind not in {"openai", "anthropic"}:
             raise ValueError("Route provider must be openai or anthropic")
-        model = entry.get("model") or (INKLING_MODEL if preset == "inkling" else os.getenv(
+        model = entry.get("model") or (INKLING_MODEL if preset is not None else os.getenv(
             "OPENAI_CHAT_MODEL" if kind == "openai" else "ANTHROPIC_CHAT_MODEL",
             "gpt-4.1-mini" if kind == "openai" else "claude-sonnet-4-5",
         ))
         if not isinstance(model, str) or not model.strip() or len(model) > 200:
             raise ValueError("Invalid route model")
-        base = entry.get("base_url") or (INKLING_BASE_URL if preset == "inkling" else (
+        base = entry.get("base_url") or (INKLING_BASE_URL if preset == "inkling" else
+                                       INKLING_LOCAL_BASE_URL if preset == "inkling-local" else (
             os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
             if kind == "openai" else os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1")
         ))
-        if not isinstance(base, str):
-            raise ValueError("Invalid model route endpoint")
-        parsed = urlparse(base)
-        if (parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password
-                or parsed.query or parsed.fragment):
-            raise ValueError("Invalid model route endpoint")
+        auth_mode = entry.get("auth_mode", "required")
         key_env = entry.get("api_key_env", "TINKER_API_KEY" if preset == "inkling" else None)
-        if key_env is not None and (not isinstance(key_env, str) or not key_env or len(key_env) > 200):
+        if key_env is not None and (not isinstance(key_env, str)
+                                    or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,199}", key_env)):
             raise ValueError("Invalid route credential environment name")
-        key = secret(key_env) if require_credentials and key_env else (
-            openai_key if kind == "openai" else anthropic_key
-        )
-        if require_credentials and not key:
-            raise ValueError("Configured model route requires an API key")
+        if auth_mode == "none" and "api_key_env" in entry:
+            raise ValueError("Unauthenticated model routes cannot configure api_key_env")
+        if preset == "inkling-local" and auth_mode == "required" and not key_env:
+            raise ValueError("Authenticated local Inkling requires an explicit api_key_env")
         prices = [entry.get("input_cost_per_million"), entry.get("output_cost_per_million")]
         if any(p is not None and (type(p) not in (float, int) or not 0 <= p <= 1_000_000 or not math.isfinite(p))
                for p in prices):
@@ -117,7 +157,23 @@ def model_routes(
         if not isinstance(name, str) or not name or len(name) > 80:
             raise ValueError("Invalid route name")
         effort = entry.get("reasoning_effort", "high" if preset == "inkling" else None)
-        result.append(ModelRoute(name, kind, model, base.rstrip("/"), key, tuple(purposes), *prices, effort))
+        token_parameter = entry.get("output_token_parameter", "max_tokens" if preset == "inkling-local" else None)
+        # Validate transport and auth before reading any credential. In particular,
+        # local no-auth routes must never load ambient hosted-provider secrets.
+        route = ModelRoute(name, kind, model, base, "", tuple(purposes), *prices, effort,
+                           auth_mode, token_parameter)
+        key = ""
+        if require_credentials and auth_mode == "required":
+            if key_env:
+                key = load_credential(key_env)
+            else:
+                supplied = openai_key if kind == "openai" else anthropic_key
+                key = supplied if supplied is not None else load_credential(
+                    "OPENAI_API_KEY" if kind == "openai" else "ANTHROPIC_API_KEY"
+                )
+            if not key:
+                raise ValueError("Configured model route requires an API key")
+        result.append(replace(route, base_url=base.rstrip("/"), api_key=key))
     if len({r.name for r in result}) != len(result):
         raise ValueError("Model route names must be unique")
     return tuple(result)
@@ -237,8 +293,14 @@ class Settings:
         ):
             raise ValueError("Invalid execution limits")
         online_allowed = features.enabled("model_generation")
-        openai_key, anthropic_key = (secret("OPENAI_API_KEY"), secret("ANTHROPIC_API_KEY")) if online_allowed else ("", "")
-        routes = model_routes(provider, openai_key, anthropic_key, require_credentials=online_allowed)
+        credentials = {}
+
+        def load_credential(name):
+            if name not in credentials:
+                credentials[name] = secret(name)
+            return credentials[name]
+
+        routes = model_routes(provider, require_credentials=online_allowed, credential_loader=load_credential)
         policies = json.loads(os.getenv("AGENT_TENANT_POLICIES_JSON", "{}"))
         if not isinstance(policies, dict) or any(not isinstance(v, dict) for v in policies.values()):
             raise ValueError("AGENT_TENANT_POLICIES_JSON must map tenants to policy settings")
@@ -251,10 +313,10 @@ class Settings:
             rag_url=os.getenv("AGENT_RAG_URL", "http://127.0.0.1:8000").rstrip("/"),
             rag_keys=rag_keys,
             provider="routed" if routes and provider == "offline" else provider,
-            openai_key=openai_key,
+            openai_key=credentials.get("OPENAI_API_KEY", ""),
             openai_base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/"),
             openai_model=os.getenv("OPENAI_CHAT_MODEL", "gpt-4.1-mini"),
-            anthropic_key=anthropic_key,
+            anthropic_key=credentials.get("ANTHROPIC_API_KEY", ""),
             anthropic_model=os.getenv("ANTHROPIC_CHAT_MODEL", "claude-sonnet-4-5"),
             max_parallel=concurrency,
             lease_seconds=lease, heartbeat_seconds=heartbeat, step_timeout_seconds=timeout,

@@ -1,0 +1,9 @@
+[
+  {
+    "name": "inkling-local",
+    "preset": "inkling-local",
+    "base_url": "http://127.0.0.1:8080/v1",
+    "auth_mode": "none",
+    "purposes": ["planning", "synthesis"]
+  }
+]

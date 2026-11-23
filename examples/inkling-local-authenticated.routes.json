@@ -1,0 +1,10 @@
+[
+  {
+    "name": "inkling-local-authenticated",
+    "preset": "inkling-local",
+    "base_url": "http://inference:8080/v1",
+    "auth_mode": "required",
+    "api_key_env": "LOCAL_INKLING_API_KEY",
+    "purposes": ["planning", "synthesis"]
+  }
+]

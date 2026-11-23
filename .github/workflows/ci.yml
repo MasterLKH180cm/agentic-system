@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 30a2e2bcec11120f92b8219d9ce5f71e2792c270 # exact RAGs v0.9 companion
+          ref: ca243630dd24e19a541008965a572e13e85a2728 # exact self-hosted Inkling companion
           path: external/RAGs
       - uses: actions/setup-python@v5
         with:
@@ -155,7 +155,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 30a2e2bcec11120f92b8219d9ce5f71e2792c270 # exact RAGs v0.9 companion
+          ref: ca243630dd24e19a541008965a572e13e85a2728 # exact self-hosted Inkling companion
           path: external/RAGs
       - name: Put the sibling RAGs build context in place
         run: |
@@ -223,7 +223,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 30a2e2bcec11120f92b8219d9ce5f71e2792c270 # exact RAGs v0.9 companion
+          ref: ca243630dd24e19a541008965a572e13e85a2728 # exact self-hosted Inkling companion
           path: external/RAGs
       - uses: actions/setup-python@v5
         with:
@@ -357,7 +357,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 30a2e2bcec11120f92b8219d9ce5f71e2792c270 # exact RAGs v0.9 companion
+          ref: ca243630dd24e19a541008965a572e13e85a2728 # exact self-hosted Inkling companion
           path: external/RAGs
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -420,7 +420,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 30a2e2bcec11120f92b8219d9ce5f71e2792c270 # exact RAGs v0.9 companion
+          ref: ca243630dd24e19a541008965a572e13e85a2728 # exact self-hosted Inkling companion
           path: external/RAGs
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -526,7 +526,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 30a2e2bcec11120f92b8219d9ce5f71e2792c270 # exact companion implementation
+          ref: ca243630dd24e19a541008965a572e13e85a2728 # exact self-hosted Inkling companion
           path: external/RAGs
           persist-credentials: false
       - uses: actions/setup-python@v5

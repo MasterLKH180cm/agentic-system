@@ -1,5 +1,6 @@
 """Purpose routing, conservative budget reservation and provider usage accounting."""
 import asyncio
+from contextlib import AsyncExitStack
 import math
 
 import httpx
@@ -80,10 +81,10 @@ class ModelGateway:
                                     "model.provider": route.provider}, allowed=telemetry_allowed):
             if route.provider == "openai":
                 path = "/chat/completions"
-                headers = {"Authorization": "Bearer " + route.api_key}
+                headers = {"Authorization": "Bearer " + route.api_key} if route.auth_mode == "required" else {}
                 payload = {"model": route.model, "messages": [
                     {"role": "system", "content": system}, {"role": "user", "content": message},
-                ], "max_completion_tokens": output_limit}
+                ], route.output_token_parameter or "max_completion_tokens": output_limit}
                 if route.reasoning_effort is not None:
                     payload["reasoning_effort"] = route.reasoning_effort
             else:
@@ -122,12 +123,21 @@ class ModelGateway:
         routes = self.routes(purpose, snapshot)
         # One elapsed budget covers all routes, connection, headers and body.
         # HTTPX's per-read inactivity timeout alone allows endless dribbling.
-        async with asyncio.timeout_at(deadline), httpx.AsyncClient(timeout=None, follow_redirects=False) as client:
+        async with asyncio.timeout_at(deadline), AsyncExitStack() as clients:
+            transports = {}
             for index, route in enumerate(routes):
+                if route.auth_mode == "required" and not route.api_key:
+                    raise ValueError("Configured model route requires an API key")
+                # Local no-auth traffic must never pass through environment
+                # proxies. Hosted routes retain their existing proxy behavior.
+                trust_environment = route.auth_mode != "none"
+                if trust_environment not in transports:
+                    transports[trust_environment] = await clients.enter_async_context(httpx.AsyncClient(
+                        timeout=None, follow_redirects=False, trust_env=trust_environment,
+                    ))
+                client = transports[trust_environment]
                 if clock() >= deadline:
                     raise TimeoutError("Model call deadline elapsed")
-                if not route.api_key:
-                    raise ValueError("Configured model route requires an API key")
                 reservation = self.store.reserve_usage(
                     tenant, run_id, route.name, purpose, estimated_input + output_limit,
                     estimated_cost(route, estimated_input, output_limit),

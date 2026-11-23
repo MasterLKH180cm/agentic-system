@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from agentic.config import INKLING_BASE_URL, INKLING_MODEL, ModelRoute, Settings, model_routes
+from agentic.config import INKLING_BASE_URL, INKLING_LOCAL_BASE_URL, INKLING_MODEL, ModelRoute, Settings, model_routes
 
 pytestmark = pytest.mark.unit
 
@@ -90,3 +90,108 @@ def test_model_timeout_is_operator_configuration(monkeypatch):
     monkeypatch.delenv("AGENT_MODEL_ROUTES_JSON", raising=False)
     monkeypatch.setenv("AGENT_MODEL_TIMEOUT_SECONDS", "120")
     assert Settings.from_env().model_timeout_seconds == 120
+
+
+def test_local_preset_does_not_load_any_ambient_provider_secret(monkeypatch):
+    monkeypatch.setenv("AGENT_ENV", "test")
+    monkeypatch.setenv("AGENT_MODEL_PROVIDER", "offline")
+    monkeypatch.setenv("AGENT_MODEL_ROUTES_JSON", '[{"preset":"inkling-local","auth_mode":"none"}]')
+    for name in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "TINKER_API_KEY"):
+        monkeypatch.setenv(name, "ambient-key-must-not-be-used")
+        monkeypatch.setenv(name + "_FILE", "/missing/ambient-secret-must-not-be-read")
+
+    def forbidden(name):
+        raise AssertionError("No local credential lookup is permitted")
+
+    monkeypatch.setattr("agentic.config.secret", forbidden)
+    settings = Settings.from_env()
+    route, = settings.routes
+    assert settings.provider == "routed"
+    assert settings.openai_key == settings.anthropic_key == route.api_key == ""
+    assert (route.provider, route.model, route.base_url, route.auth_mode,
+            route.reasoning_effort, route.output_token_parameter) == (
+        "openai", INKLING_MODEL, INKLING_LOCAL_BASE_URL, "none", None, "max_tokens",
+    )
+
+
+def test_local_authenticated_preset_requires_explicit_credential_name(monkeypatch):
+    monkeypatch.setenv("AGENT_MODEL_ROUTES_JSON", '[{"preset":"inkling-local"}]')
+    with pytest.raises(ValueError, match="explicit api_key_env"):
+        model_routes("offline", "ambient-openai-key", "ambient-anthropic-key")
+
+
+def test_authenticated_local_route_loads_only_its_selected_secret(monkeypatch, tmp_path):
+    credential = tmp_path / "local-key"
+    credential.write_text("dedicated-local-key\n")
+    monkeypatch.setenv("AGENT_ENV", "test")
+    monkeypatch.setenv("AGENT_MODEL_PROVIDER", "offline")
+    monkeypatch.setenv("AGENT_MODEL_ROUTES_JSON", json.dumps([{
+        "preset": "inkling-local", "base_url": "http://inference:8080/v1", "api_key_env": "LOCAL_INKLING_API_KEY",
+    }]))
+    monkeypatch.setenv("LOCAL_INKLING_API_KEY_FILE", str(credential))
+    monkeypatch.delenv("LOCAL_INKLING_API_KEY", raising=False)
+    for name in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "TINKER_API_KEY"):
+        monkeypatch.setenv(name + "_FILE", "/missing/unused-secret")
+    settings = Settings.from_env()
+    route, = settings.routes
+    assert route.auth_mode == "required" and route.api_key == "dedicated-local-key"
+    assert settings.openai_key == settings.anthropic_key == ""
+
+
+@pytest.mark.parametrize("base", ["http://127.0.0.1:8080/v1", "https://127.0.0.2/v1", "http://[::1]:8080/v1"])
+def test_no_auth_accepts_only_clean_literal_loopback_addresses(base):
+    route = ModelRoute("local", "openai", INKLING_MODEL, base, "", auth_mode="none")
+    assert route.auth_mode == "none"
+
+
+@pytest.mark.parametrize("base", [
+    "http://localhost:8080/v1", "http://inference:8080/v1", "http://host.docker.internal:8080/v1",
+    "http://192.168.1.1/v1", "https://example.invalid/v1", "https://8.8.8.8/v1", "http://0.0.0.0/v1",
+    "http://127.1/v1", "http://2130706433/v1", "http://127.0.0.1.example.invalid/v1",
+    "http://[::ffff:127.0.0.1]/v1", "http://[::1%25lo]/v1", "http://user@127.0.0.1/v1",
+    "http://@127.0.0.1/v1", "http://127.0.0.1/v1?", "http://127.0.0.1/v1#",
+    "http://127.0.0.1:0/v1", "http://127.0.0.1:65536/v1", "http://127.0.0.1:invalid/v1",
+    " http://127.0.0.1/v1", "http://127.0.0.1/v1\n", "file:///127.0.0.1/v1",
+])
+def test_no_auth_rejects_unsafe_or_ambiguous_endpoint(base):
+    with pytest.raises(ValueError, match="endpoint"):
+        ModelRoute("local", "openai", INKLING_MODEL, base, "", auth_mode="none")
+
+
+@pytest.mark.parametrize("key_env", [None, "LOCAL_INKLING_API_KEY"])
+def test_no_auth_rejects_a_credential_selector_even_when_empty(monkeypatch, key_env):
+    monkeypatch.setenv("AGENT_MODEL_ROUTES_JSON", json.dumps([{
+        "preset": "inkling-local", "auth_mode": "none", "api_key_env": key_env,
+    }]))
+    with pytest.raises(ValueError, match="cannot configure api_key_env"):
+        model_routes("offline", "", "")
+
+
+@pytest.mark.parametrize("changes", [
+    {"api_key": "contradictory"}, {"provider": "anthropic"}, {"auth_mode": True}, {"auth_mode": None},
+    {"auth_mode": "optional"}, {"output_token_parameter": "max_new_tokens"}, {"output_token_parameter": True},
+])
+def test_local_route_rejects_contradictory_auth_and_unknown_output_fields(changes):
+    values = dict(name="local", provider="openai", model=INKLING_MODEL,
+                  base_url=INKLING_LOCAL_BASE_URL, api_key="", auth_mode="none")
+    with pytest.raises(ValueError):
+        ModelRoute(**{**values, **changes})
+
+
+def test_output_token_parameter_is_openai_only():
+    with pytest.raises(ValueError, match="output_token_parameter"):
+        ModelRoute("local", "anthropic", "model", "https://example.invalid", "key",
+                   output_token_parameter="max_tokens")
+
+
+def test_selected_hosted_credentials_remain_available_and_unrelated_secrets_are_not_read(monkeypatch):
+    monkeypatch.setenv("AGENT_ENV", "test")
+    monkeypatch.setenv("AGENT_MODEL_PROVIDER", "openai")
+    monkeypatch.delenv("AGENT_MODEL_ROUTES_JSON", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY_FILE", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "selected-hosted-key")
+    monkeypatch.setenv("ANTHROPIC_API_KEY_FILE", "/missing/unselected-secret")
+    settings = Settings.from_env()
+    assert settings.openai_key == settings.routes[0].api_key == "selected-hosted-key"
+    assert settings.anthropic_key == ""
+    assert settings.routes[0].auth_mode == "required"

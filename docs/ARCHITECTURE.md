@@ -232,6 +232,22 @@ validation remains local. Truncated responses fail even if their text happens
 to be valid JSON; any valid provider usage is settled first. Separate reasoning
 content is never returned as an answer.
 
+The separate `inkling-local` route preset targets an operator-run compatible
+server, defaults to `http://127.0.0.1:8080/v1`, uses `max_tokens`, and leaves
+reasoning effort unset. Route authentication remains required unless the
+operator explicitly selects `auth_mode: none`. That mode accepts only literal
+IPv4 loopback or `::1`, omits Authorization, bypasses environment proxies and
+loads no provider credentials. Local authenticated presets require an explicit
+credential environment name. Hosted defaults remain unchanged; credentials are
+loaded lazily for the selected authenticated routes only.
+
+The local inference runtime and model cache are separate deployment components.
+Container clients need a reachable authenticated service endpoint because their
+loopback is not the host's loopback. Local model availability does not change
+the JSON planner, tool allowlist, approval policy, embeddings or durable worker
+contracts. Model/tool parsers are server configuration; the Agent gateway does
+not turn native tool calls or reasoning text into an executable plan.
+
 `AGENT_MODEL_TIMEOUT_SECONDS` bounds the entire gateway call (90 seconds by
 default, configurable from 0.1 to 360), including all fallback attempts and
 response-body reads. Slow dribbling does not reset the timer. The worker can
