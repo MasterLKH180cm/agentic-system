@@ -5,6 +5,7 @@ from urllib.parse import quote
 import httpx
 
 from agentic.features import Features
+from agentic.config import MODEL_PROVIDERS
 
 
 BASE_URL = os.getenv("AGENT_URL", "http://127.0.0.1:8001").rstrip("/")
@@ -19,7 +20,8 @@ def remote_capabilities() -> dict:
         result = response.json()
     if (not isinstance(result, dict) or not isinstance(result.get("features"), dict)
             or not isinstance(result.get("model"), dict)
-            or result["model"].get("provider") not in {"offline", "openai", "anthropic", "routed"}):
+            or not isinstance(result["model"].get("provider"), str)
+            or result["model"].get("provider") not in MODEL_PROVIDERS):
         raise ValueError("Agent server returned invalid capabilities")
     # Do not interpret an older/malformed capability response as permission.
     if not {"mcp", "dag", "model_generation"} <= result["features"].keys():

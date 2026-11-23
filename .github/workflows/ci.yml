@@ -17,6 +17,99 @@ env:
   HF_HUB_DISABLE_TELEMETRY: "1"
 
 jobs:
+  litellm-gateway:
+    name: Pinned LiteLLM process and container contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg17
+        env:
+          POSTGRES_USER: gatewaytest
+          POSTGRES_PASSWORD: disposable-gateway-ci-password
+          POSTGRES_DB: gatewaytest
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U gatewaytest -d gatewaytest"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      AGENT_TEST_POSTGRES_URL: postgresql://gatewaytest:disposable-gateway-ci-password@127.0.0.1:5432/gatewaytest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout the tested knowledge plane
+        uses: actions/checkout@v4
+        with:
+          repository: MasterLKH180cm/RAGs
+          ref: a4bce0645177f5058c819c70d44688d94ee1589c # exact reviewed LiteLLM companion
+          path: external/RAGs
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.9"
+          enable-cache: true
+          cache-suffix: litellm-gateway
+          cache-dependency-glob: |
+            uv.lock
+            external/RAGs/uv.lock
+            deploy/litellm/requirements.txt
+      - name: Install locked applications and the isolated hash-locked gateway
+        run: |
+          uv sync --locked --extra dev --extra mcp --extra postgres
+          uv export --locked --extra dev --extra mcp --extra postgres --no-hashes --no-emit-project --quiet --output-file "$RUNNER_TEMP/agent-constraints.txt"
+          uv export --project external/RAGs --locked --extra mcp --extra postgres --no-hashes --no-emit-project --quiet --output-file "$RUNNER_TEMP/rags-requirements.txt"
+          uv pip install --python .venv/bin/python --constraint "$RUNNER_TEMP/agent-constraints.txt" --requirement "$RUNNER_TEMP/rags-requirements.txt" -e './external/RAGs[mcp,postgres]'
+          uv pip check --python .venv/bin/python
+          uv venv "$RUNNER_TEMP/litellm" --python 3.12
+          uv pip install --python "$RUNNER_TEMP/litellm/bin/python" --require-hashes -r deploy/litellm/requirements.txt
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+      - name: Prepare the pinned Prisma platform engines and generated client
+        env:
+          LITELLM_LOCAL_MODEL_COST_MAP: "True"
+        run: |
+          "$RUNNER_TEMP/litellm/bin/python" -m prisma version
+          gateway_schema=$("$RUNNER_TEMP/litellm/bin/python" -c "import importlib.util,pathlib; print(pathlib.Path(importlib.util.find_spec('litellm').origin).parent / 'proxy/schema.prisma')")
+          PATH="$RUNNER_TEMP/litellm/bin:$PATH" "$RUNNER_TEMP/litellm/bin/python" -m prisma generate --schema "$gateway_schema"
+      - name: Verify the exact image signature and release workflow identity
+        run: |
+          curl --fail --location --retry 2 --max-time 120 https://github.com/sigstore/cosign/releases/download/v3.1.4/cosign-linux-amd64 --output "$RUNNER_TEMP/cosign"
+          echo "424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa  $RUNNER_TEMP/cosign" | sha256sum --check --status
+          chmod 700 "$RUNNER_TEMP/cosign"
+          sh scripts/verify_litellm_image.sh --cosign "$RUNNER_TEMP/cosign" --report reports/testing/litellm-image-signature.json
+      - name: Exercise actual gateway TLS, database, service keys and application adapters
+        run: >-
+          python scripts/check_litellm.py --gateway-python "$RUNNER_TEMP/litellm/bin/python"
+          --rags-path external/RAGs --report reports/testing/litellm-process.json
+      - name: Verify actual Compose rendering and generate disposable stack configuration
+        run: |
+          python scripts/check_litellm_compose.py --report reports/testing/litellm-compose-config.json
+          mkdir -p ../RAGs
+          cp -a external/RAGs/. ../RAGs/
+          python scripts/bootstrap_compose.py
+          python scripts/bootstrap_litellm.py
+      - name: Exercise the signed gateway image and both running application containers
+        shell: bash
+        run: |
+          python tests/litellm_docker_fixture.py --key-file data/litellm/upstream.key > "$RUNNER_TEMP/litellm-fixture.log" 2>&1 &
+          fixture_pid=$!
+          trap 'kill "$fixture_pid" 2>/dev/null || true' EXIT
+          docker compose -f compose.yaml -f compose.litellm.yaml --profile litellm up -d --build --wait --wait-timeout 300
+          python scripts/check_litellm_containers.py --report reports/testing/litellm-containers.json
+      - name: Publish sanitized gateway evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: litellm-gateway-evidence
+          path: reports/testing/
+          if-no-files-found: error
+      - name: Clean up disposable gateway containers and volumes
+        if: always()
+        run: |
+          if [ -f data/litellm/proxy.env ]; then
+            docker compose -f compose.yaml -f compose.litellm.yaml --profile litellm down -v --remove-orphans
+          fi
+
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -33,7 +126,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: ca243630dd24e19a541008965a572e13e85a2728 # exact self-hosted Inkling companion
+          ref: a4bce0645177f5058c819c70d44688d94ee1589c # exact reviewed LiteLLM companion
           path: external/RAGs
       - uses: actions/setup-python@v5
         with:
@@ -155,7 +248,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: ca243630dd24e19a541008965a572e13e85a2728 # exact self-hosted Inkling companion
+          ref: a4bce0645177f5058c819c70d44688d94ee1589c # exact reviewed LiteLLM companion
           path: external/RAGs
       - name: Put the sibling RAGs build context in place
         run: |
@@ -223,7 +316,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: ca243630dd24e19a541008965a572e13e85a2728 # exact self-hosted Inkling companion
+          ref: a4bce0645177f5058c819c70d44688d94ee1589c # exact reviewed LiteLLM companion
           path: external/RAGs
       - uses: actions/setup-python@v5
         with:
@@ -284,7 +377,7 @@ jobs:
           curl -fsS --max-time 2 http://127.0.0.1:9000/minio/health/ready
       - name: Actual external service contracts
         run: >-
-          python -m pytest -q tests/test_platform.py tests/test_postgres_accounting.py tests/test_postgres_concurrency.py -m external --require-no-skips
+          python -m pytest -q -m external --require-no-skips
           --test-inventory reports/testing/inventory-storage.json
           --junitxml reports/testing/junit-storage.xml
       - name: Create isolated PostgreSQL databases for each E2E harness
@@ -357,7 +450,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: ca243630dd24e19a541008965a572e13e85a2728 # exact self-hosted Inkling companion
+          ref: a4bce0645177f5058c819c70d44688d94ee1589c # exact reviewed LiteLLM companion
           path: external/RAGs
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -420,7 +513,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: ca243630dd24e19a541008965a572e13e85a2728 # exact self-hosted Inkling companion
+          ref: a4bce0645177f5058c819c70d44688d94ee1589c # exact reviewed LiteLLM companion
           path: external/RAGs
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -526,7 +619,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: ca243630dd24e19a541008965a572e13e85a2728 # exact self-hosted Inkling companion
+          ref: a4bce0645177f5058c819c70d44688d94ee1589c # exact reviewed LiteLLM companion
           path: external/RAGs
           persist-credentials: false
       - uses: actions/setup-python@v5

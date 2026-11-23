@@ -1,5 +1,4 @@
 """Tenant-scoped workflows, immutable definitions, memory and execution inspection."""
-import asyncio
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request, status
@@ -8,6 +7,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from agentic.auth import Authenticator
+from agentic.async_io import OffloadBusy, run_sync
 from agentic.config import Settings
 from agentic.control import ControlPlane
 from agentic.features import FeatureDisabled
@@ -34,6 +34,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.exception_handler(FeatureDisabled)
     async def disabled_feature(request: Request, exc: FeatureDisabled):
         return JSONResponse(status_code=403, content={"detail": exc.detail()})
+
+    @app.exception_handler(OffloadBusy)
+    async def saturated_persistence(request: Request, exc: OffloadBusy):
+        return JSONResponse(status_code=503, content={"detail": "Persistence capacity is occupied"},
+                            headers={"Retry-After": "1"})
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_error(request: Request, exc: RequestValidationError):
@@ -63,15 +68,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def submit_workflow(payload: WorkflowIn, tenant: str, *, principal=None) -> dict:
         try:
             control.validate_submission_features(payload)
-            duplicate = await asyncio.to_thread(store.duplicate, tenant, payload)
+            duplicate = await run_sync(store.duplicate, tenant, payload)
             if duplicate:
                 if principal is not None:
-                    original = await asyncio.to_thread(store.get, tenant, duplicate["id"])
+                    original = await run_sync(store.get, tenant, duplicate["id"])
                     auth.require(principal, "workflow:write", {
                         "tenant": tenant, "namespace": original["specification"].get("memory_namespace", "default"),
                     })
                 return duplicate
-            compiled, specification = await asyncio.to_thread(control.resolve, tenant, payload)
+            compiled, specification = await run_sync(control.resolve, tenant, payload)
             if principal is not None:
                 specification["requester_subject"] = principal.subject
                 auth.require(principal, "workflow:write", {"tenant": tenant, "namespace": specification["memory_namespace"]})
@@ -85,7 +90,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if payload.steps or payload.workflow_id:
                     control.validate_steps(compiled.steps, specification, features=config.features,
                                            online=config.provider != "offline")
-            return await asyncio.to_thread(
+            return await run_sync(
                 store.submit, tenant, compiled, specification=specification,
                 request_hash=store.fingerprint(payload), max_queued_runs=config.max_queued_runs,
             )
@@ -142,7 +147,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         payload: WorkflowIn, request: Request,
         tenant: str = Depends(auth.tenant_dependency("workflow:write")),
     ) -> dict:
-        principal = auth.authenticate(request.headers.get("authorization"))
+        principal = await run_sync(auth.authenticate, request.headers.get("authorization"))
         return await submit_workflow(payload, tenant, principal=principal)
 
     @app.get("/workflows")
@@ -283,9 +288,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def usage(
         request: Request, run_id: str | None = None, tenant: str = Depends(auth.tenant_dependency("usage:read")),
     ) -> dict:
-        if run_id:
+        if run_id is not None:
             authorized_run(request, tenant, run_id, "usage:read")
-        return store.usage(tenant, run_id)
+        principal = auth.authenticate(request.headers.get("authorization"))
+        return store.usage(tenant, run_id, namespaces=principal.attributes.get("memory_namespaces"))
 
     @app.get("/artifacts/{artifact_id}")
     def artifact(artifact_id: str, request: Request, tenant: str = Depends(auth.tenant_dependency("workflow:read"))) -> dict:

@@ -1,0 +1,13 @@
+[
+  {
+    "name": "inkling-gateway-v1",
+    "provider": "openai",
+    "model": "gateway/inkling-2-mini-iq4nl-v1",
+    "base_url": "https://litellm:4000/v1",
+    "api_key_env": "AGENT_GATEWAY_API_KEY",
+    "ca_file": "/app/gateway/ca.pem",
+    "auth_mode": "required",
+    "output_token_parameter": "max_tokens",
+    "purposes": ["planning", "synthesis"]
+  }
+]

@@ -5,6 +5,12 @@ This document describes the current implementation. The acceptance contract is
 [SPEC_V02.md](SPEC_V02.md). The historical v0.3 checks
 are in [IMPLEMENTATION_REVIEW_V03.md](IMPLEMENTATION_REVIEW_V03.md); the
 [v0.2 review](IMPLEMENTATION_REVIEW.md) remains a historical record.
+The [execution correction contract](REVIEW_EXECUTION_FIX_SPEC.md) adds the
+current usage, persistence and provider-validation rules. The optional shared
+generation deployment follows [LITELLM_SPEC.md](LITELLM_SPEC.md).
+The [review report](REVIEW_LITELLM.md) and
+[local validation record](testing-results-review-litellm.json) retain executed
+evidence separately from the historical versioned reports and published CI.
 
 ## Service responsibilities
 
@@ -30,6 +36,23 @@ operational and feature settings. RAG receives its own provider/chunker/tokenize
 configuration and feature file. Optional storage/model adapters still need
 their extras and configuration. Custom model-route credential variable names
 require an explicit API/worker Compose override.
+
+### Optional shared generation proxy
+
+The application `ModelGateway` remains responsible for purpose routes,
+reservations and result validation. The optional LiteLLM process sits downstream
+of it and RAG's router, exposes `gateway/inkling-2-mini-iq4nl-v1`, and uses its
+own PostgreSQL database. Separate service keys and verified HTTPS protect that
+boundary; application containers receive no gateway master key, upstream key or
+gateway database credential. [LITELLM.md](LITELLM.md) documents bootstrap,
+private-CA trust, the one-shot administrative initializer and rollback.
+
+The shipped proxy permits one generation deployment, disables its retries,
+fallback and cache, and preserves the applications' whole-call deadlines.
+Changing the model/runtime/quantization contract requires a new immutable alias.
+Agentic's default remains offline; RAG's default embeddings remain local hashing.
+Embedding compatibility, RAG source validity and Agentic workflow state stay
+with their existing owners. No LiteLLM SDK dependency enters either application.
 
 ## Configuration and feature constraints
 
@@ -66,6 +89,10 @@ MCP bridge reflect these capabilities; server-side guards remain authoritative.
 MCP also rechecks permissions when invoked. UI/docs routes are absent when
 those interfaces are disabled; other disabled operations return an explicit
 `403 feature_disabled`. Feature changes require API and worker recreation.
+API capabilities and MCP use the same resolved provider set: `offline`,
+`openai`, `anthropic`, `inkling` and `routed`. The latter describes explicit
+routes resolved from the offline default; it is not an environment-selector
+value. Capability discovery does not make an inference request.
 
 ## PostgreSQL transaction architecture
 
@@ -93,6 +120,22 @@ are still claimed in separate short serialized transitions; tool execution stays
 outside the transaction. Queue readiness is computed from current persisted DAG
 state, including expired leases. No external broker or Redis queue is added.
 SQLite keeps its transactional single-writer claim implementation.
+
+Async API, runtime, tool and model paths offload synchronous persistence through
+process-owned executors: 16 ordinary threads with at most 64 admitted calls,
+and a separate 16-call/16-thread lease-renewal lane. Cancellation retains an
+admission slot until its underlying work finishes. Admission exhaustion fails
+explicitly; cancelling a waiter cannot stop an already running transaction.
+Database connection, statement and lock limits still apply.
+
+Workers pass their stricter local deadline into owned mutations. After acquiring
+the database lock, the store checks it alongside persisted deadline, lease and
+cancellation state. The monitor covers execution and durable finalization, so
+offloading cannot make a late write valid. A timed-out model call returns while
+bounded settlement proceeds; uncertain usage stays reserved until settlement
+commits, including when settlement admission is saturated. These rules prevent
+one blocked write from blocking the event loop without promising progress when
+all database capacity is exhausted. See [the regression contract](REVIEW_EXECUTION_FIX_SPEC.md#nonblocking-persistence).
 
 ## Submission and definition snapshots
 
@@ -194,6 +237,10 @@ reported engine identity, without source bodies or arbitrary upstream trace.
 - Results, events, duplicate submissions, memory, usage inspection, and artifacts
   enforce their relevant tenant and namespace boundaries. Memory provenance must
   refer to an existing authorized tenant run; TTL excludes expired records.
+- Usage records and aggregates share the same namespace predicate and tenant
+  join. Restricted principals see only usage attached to permitted runs;
+  unbound usage requires an unrestricted tenant principal. An empty namespace
+  allowlist sees no calls, and legacy run definitions use namespace `default`.
 - Typed tools validate arguments again at execution. Adaptive loops may use only
   the registered read-only subset. Retrieved text and model plans cannot grant
   tools, choose arbitrary URLs, or expand budgets.
@@ -247,6 +294,11 @@ loopback is not the host's loopback. Local model availability does not change
 the JSON planner, tool allowlist, approval policy, embeddings or durable worker
 contracts. Model/tool parsers are server configuration; the Agent gateway does
 not turn native tool calls or reasoning text into an executable plan.
+
+A route's optional `ca_file` supplies an explicit private HTTPS trust bundle.
+It must be a regular nonsymlink PEM file of at most 1 MiB. Such routes retain
+certificate/hostname verification and disable ambient environment proxy trust.
+Transport trust does not attest to the weights behind a gateway alias.
 
 `AGENT_MODEL_TIMEOUT_SECONDS` bounds the entire gateway call (90 seconds by
 default, configurable from 0.1 to 360), including all fallback attempts and

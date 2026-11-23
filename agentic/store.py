@@ -539,7 +539,8 @@ class Store:
         clock = time.time()
         if row is None or row["lease_until"] <= clock:
             return False
-        if row["deadline_at"] is not None and row["deadline_at"] <= clock:
+        if ((row["deadline_at"] is not None and row["deadline_at"] <= clock)
+                or job.get("worker_deadline_at", float("inf")) <= clock):
             serialized = json.dumps(deadline_result())
             conn.execute(
                 "UPDATE steps SET status='failed',result=?,error='deadline',lease_token=NULL,lease_until=NULL "
@@ -770,14 +771,30 @@ class Store:
                     "input_tokens": input_tokens, "output_tokens": output_tokens,
                 })
 
-    def usage(self, tenant: str, run_id: str | None = None) -> dict:
-        sql = "SELECT * FROM model_usage WHERE tenant=?"
+    def usage(self, tenant: str, run_id: str | None = None, *, namespaces: list[str] | None = None) -> dict:
+        sql = "SELECT model_usage.* FROM model_usage WHERE model_usage.tenant=?"
         args = [tenant]
-        if run_id:
-            sql += " AND run_id=?"
+        if run_id is not None:
+            sql += " AND model_usage.run_id=?"
             args.append(run_id)
+        if namespaces is not None:
+            # Bind namespace values in SQL before returning records or totals.
+            # Unbound usage has no workflow namespace and is excluded. Both
+            # sides of the join are tenant-scoped, including legacy default runs.
+            if namespaces:
+                namespace = ("CASE WHEN jsonb_exists(r.specification::jsonb,'memory_namespace') "
+                             "THEN r.specification::jsonb->>'memory_namespace' ELSE 'default' END"
+                             if self.is_postgres else
+                             "CASE WHEN json_type(r.specification,'$.memory_namespace') IS NULL "
+                             "THEN 'default' ELSE json_extract(r.specification,'$.memory_namespace') END")
+                sql += (" AND EXISTS (SELECT 1 FROM runs r WHERE r.id=model_usage.run_id "
+                        "AND r.tenant=model_usage.tenant AND " + namespace + " IN (" +
+                        ",".join("?" for _ in namespaces) + "))")
+                args.extend(namespaces)
+            else:
+                sql += " AND 1=0"
         with self.connect(read_only=True) as conn:
-            records = [dict(row) for row in conn.execute(sql + " ORDER BY created_at,id", args)]
+            records = [dict(row) for row in conn.execute(sql + " ORDER BY model_usage.created_at,model_usage.id", args)]
         known_cost = sum(row["cost_microusd"] or 0 for row in records) / 1_000_000
         cost_complete = all(row["cost_microusd"] is not None for row in records)
         return {

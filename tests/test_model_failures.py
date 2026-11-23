@@ -3,6 +3,7 @@ import asyncio
 import gzip
 import json
 import time
+import threading
 from dataclasses import replace
 
 import httpx
@@ -12,6 +13,7 @@ from agentic.config import ModelRoute, Settings
 from agentic.model import ModelGateway
 from agentic.schemas import Step, WorkflowIn
 from agentic.store import Store
+from agentic.async_io import run_sync
 
 pytestmark = pytest.mark.integration
 
@@ -118,6 +120,17 @@ async def complete(model, run_id):
     return await model.complete("System", "Question", tenant="tenant-a", run_id=run_id)
 
 
+async def settled_usage(store, run_id):
+    # After cancellation, the caller's deadline wins over accounting lock waits.
+    # The reservation remains charged until bounded background settlement ends.
+    async with asyncio.timeout(2):
+        while True:
+            usage = await run_sync(store.usage, "tenant-a", run_id)
+            if all(call["status"] != "reserved" for call in usage["calls"]):
+                return usage
+            await asyncio.sleep(0.01)
+
+
 async def test_inkling_transport_preserves_budget_effort_and_separate_reasoning(provider):
     model, store, run_id, state = provider
     route = replace(model.config.routes[0], model="thinkingmachines/Inkling-2-Mini", reasoning_effort=0.2)
@@ -199,7 +212,7 @@ async def test_protocol_errors_do_not_fallback_or_erase_reserved_charges(provide
         await complete(model, run_id)
     assert [call["path"] for call in state["calls"]] == ["/primary/chat/completions"]
     assert state["calls"][0]["headers"]["accept-encoding"] == "identity"
-    usage = store.usage("tenant-a", run_id)
+    usage = await settled_usage(store, run_id)
     assert len(usage["calls"]) == 1
     assert usage["calls"][0]["status"] == "uncertain_response_error"
     assert usage["charged_tokens"] == ModelGateway.input_units("System", "Question") + 32
@@ -220,7 +233,7 @@ async def test_http_cancellation_retains_uncertain_reservation_without_fallback(
         if not task.done():
             task.cancel()
         await asyncio.gather(task, return_exceptions=True)
-    usage = store.usage("tenant-a", run_id)
+    usage = await settled_usage(store, run_id)
     assert len(state["calls"]) == len(usage["calls"]) == 1
     assert usage["calls"][0]["status"] == "uncertain_cancelled"
     assert usage["charged_tokens"] == ModelGateway.input_units("System", "Question") + 32
@@ -241,7 +254,7 @@ async def test_total_model_deadline_stops_headers_and_dribbling_without_fallback
     with pytest.raises(TimeoutError):
         await asyncio.wait_for(complete(model, run_id), timeout=2)
     assert len(state["calls"]) == 1
-    record, = store.usage("tenant-a", run_id)["calls"]
+    record, = (await settled_usage(store, run_id))["calls"]
     assert record["status"] == "uncertain_timeout"
     assert record["charged_tokens"] == ModelGateway.input_units("System", "Question") + 32
     assert record["cost_microusd"] > 0
@@ -257,7 +270,7 @@ async def test_fallback_attempts_share_one_elapsed_model_deadline(provider):
         await asyncio.wait_for(complete(model, run_id), timeout=2)
     assert time.monotonic() - started < 0.6
     assert len(state["calls"]) == 2
-    calls = store.usage("tenant-a", run_id)["calls"]
+    calls = (await settled_usage(store, run_id))["calls"]
     assert [call["status"] for call in calls] == ["uncertain_http_error", "uncertain_timeout"]
 
 
@@ -265,15 +278,26 @@ async def test_blocking_settlement_cannot_return_late_success_or_erase_reported_
     model, store, run_id, _ = provider
     model.config = replace(model.config, model_timeout_seconds=0.25)
     settle = store.settle_usage
+    settled = threading.Event()
 
     def delayed_settlement(reservation, **kwargs):
         if kwargs.get("status") == "reported":
             time.sleep(0.3)
-        return settle(reservation, **kwargs)
+        result = settle(reservation, **kwargs)
+        settled.set()
+        return result
 
     monkeypatch.setattr(store, "settle_usage", delayed_settlement)
     with pytest.raises(TimeoutError):
         await complete(model, run_id)
+    # The deadline returns while the already started database operation is
+    # pending. Its reservation remains charged; no competing uncertain write
+    # can steal the final reported settlement.
+    pending, = store.usage("tenant-a", run_id)["calls"]
+    assert pending["status"] in {"reserved", "reported"}
+    if pending["status"] == "reserved":
+        assert pending["charged_tokens"] == ModelGateway.input_units("System", "Question") + 32
+    assert await asyncio.to_thread(settled.wait, 2)
     record, = store.usage("tenant-a", run_id)["calls"]
     assert record["status"] == "reported" and record["charged_tokens"] == 10
 

@@ -1,0 +1,73 @@
+# Standalone gateway, also included by the full-stack compose.litellm.yaml.
+# Generate data/litellm with scripts/bootstrap_litellm.py before selecting this profile.
+services:
+  litellm-db:
+    image: pgvector/pgvector:0.8.7-pg17
+    profiles: [litellm]
+    env_file: ../../data/litellm/db.env
+    volumes:
+      - litellm-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U litellm -d litellm']
+      interval: 5s
+      timeout: 4s
+      retries: 30
+    restart: unless-stopped
+
+  litellm:
+    image: ghcr.io/berriai/litellm:v1.110.2@sha256:ef798594ca3db8d81bad2e1439f536f49b71fe095ee9f20416f5e149b4e22035
+    profiles: [litellm]
+    env_file: ../../data/litellm/proxy.env
+    command: [--config, /gateway/config.yaml, --host, '0.0.0.0', --port, '4000',
+              --num_workers, '1', --limit_concurrency, '64',
+              --ssl_keyfile_path, /gateway/server.key, --ssl_certfile_path, /gateway/server.pem]
+    ports:
+      - '127.0.0.1:4000:4000'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    volumes:
+      - ../../data/litellm/proxy.yaml:/gateway/config.yaml:ro
+      - ../../data/litellm/server.key:/gateway/server.key:ro
+      - ../../data/litellm/server.pem:/gateway/server.pem:ro
+      - ../../data/litellm/ca.pem:/gateway/ca.pem:ro
+    depends_on:
+      litellm-db:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import ssl,urllib.request; urllib.request.urlopen('https://localhost:4000/health/readiness',context=ssl.create_default_context(cafile='/gateway/ca.pem'),timeout=3).read(4096)"]
+      interval: 5s
+      timeout: 4s
+      retries: 40
+      start_period: 30s
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  litellm-init:
+    build:
+      context: ../..
+    profiles: [litellm]
+    # This one-shot administrative bootstrap alone may read the master key and
+    # write local provisioning receipts. No API/worker container receives it.
+    user: '0:0'
+    env_file: ../../data/litellm/admin.env
+    command: [python, /bootstrap-tools/init_keys.py]
+    volumes:
+      - ../../data/litellm/receipts:/bootstrap
+      - ../../data/litellm/ca.pem:/bootstrap/ca.pem:ro
+      - ../../data/litellm/rags/api.key:/bootstrap/rags/api.key:ro
+      - ../../data/litellm/agentic/api.key:/bootstrap/agentic/api.key:ro
+      - ./init_keys.py:/bootstrap-tools/init_keys.py:ro
+    depends_on:
+      litellm:
+        condition: service_healthy
+    cap_drop: [ALL]
+    # The 0700 receipt directory belongs to the host operator, whose UID may
+    # differ from container root. Grant only its required DAC bypass; the CA
+    # signing key, database/upstream secrets and TLS server key are not mounted.
+    cap_add: [DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    restart: 'no'
+
+volumes:
+  litellm-db-data:
