@@ -613,6 +613,11 @@ The separate fresh native admission replay completed in **31 min 40.946 s**:
 192 Q8 generation requests; peak child RSS was **3.720 GiB**. The frozen profile
 remains **disabled by default**. The results report preserves its exact profile,
 source hashes, four failed gates and the earlier timeout as separate evidence.
+The initial merged-master browser run also exposed a held-response ordering
+cycle in the E2E fixture. The [follow-up evidence](docs/QWEN_RESULTS_20261123.md#post-merge-browser-fixture-correction)
+preserves that failure and a controlled real PostgreSQL counterexample. The
+fixture now releases both holds before terminal waits, retaining all twelve
+checks, the single worker and existing deadlines; production code is unchanged.
 
 ## PostgreSQL concurrency and storage measurement
 

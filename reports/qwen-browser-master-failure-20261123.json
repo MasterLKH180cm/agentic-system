@@ -1,0 +1,88 @@
+{
+  "schema_version": "agent-browser-e2e-v1",
+  "status": "failed",
+  "expected_checks": [
+    "successful_workflow",
+    "evidence_refusal",
+    "unauthorized_access",
+    "approval_separation",
+    "stream_view_ownership",
+    "stale_status_response",
+    "stale_submission_response",
+    "credential_lifetime",
+    "actionable_request_errors",
+    "ambiguous_submission_retry",
+    "malformed_acknowledgement_retry",
+    "submission_identity_lifetime"
+  ],
+  "checks": [
+    {
+      "id": "successful_workflow",
+      "passed": true,
+      "actual_evidence": true,
+      "terminal_stream": true
+    },
+    {
+      "id": "evidence_refusal",
+      "passed": true,
+      "factual_answer": false,
+      "terminal_status": "failed"
+    },
+    {
+      "id": "unauthorized_access",
+      "passed": true,
+      "invalid_credential": 401,
+      "other_tenant": 404
+    },
+    {
+      "id": "approval_separation",
+      "passed": true,
+      "requester_rejected": true,
+      "artifact_value": 42
+    }
+  ],
+  "backend": "postgresql",
+  "real_services": [
+    "rag-http",
+    "agent-http",
+    "independent-worker",
+    "chromium"
+  ],
+  "live_paid_provider": false,
+  "page_errors": [],
+  "screenshots": [
+    "reports/testing/browser-artifacts/successful-workflow.png",
+    "reports/testing/browser-artifacts/evidence-refusal.png",
+    "reports/testing/browser-artifacts/approved-publication.png",
+    "reports/testing/browser-artifacts/failure.png"
+  ],
+  "storage": {
+    "rag": {
+      "backend": "postgresql",
+      "vector_search": "pgvector_exact"
+    },
+    "agent": {
+      "backend": "postgresql",
+      "memory_search": "lexical"
+    }
+  },
+  "browser_version": "151.0.7922.34",
+  "browser_failure": {
+    "notice": "",
+    "result": "{\n  \"id\": \"f6bf4e6a-3b07-4a70-ad87-2007b6f2d21e\",\n  \"duplicate\": false\n}"
+  },
+  "error": {
+    "type": "AssertionError",
+    "message": "Deadline waiting for terminal workflow e9b09b87-a9a8-418b-ba5a-1044b17acb77",
+    "diagnostic_tail": "Deadline waiting for terminal workflow e9b09b87-a9a8-418b-ba5a-1044b17acb77"
+  },
+  "service_diagnostics": {
+    "worker-1": "INFO:httpx:HTTP Request: POST http://127.0.0.1:34863/query \"HTTP/1.0 200 OK\"\nINFO:httpx:HTTP Request: POST http://127.0.0.1:34863/query \"HTTP/1.0 200 OK\"\nINFO:httpx:HTTP Request: POST http://127.0.0.1:34863/query \"HTTP/1.0 200 OK\"\n",
+    "api": "44b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:49442 - \"GET /workflows/e9b09b87-a9a8-418b-ba5a-1044b17acb77 HTTP/1.1\" 200 OK\nINFO:     Shutting down\nINFO:     Waiting for application shutdown.\nINFO:     Application shutdown complete.\nINFO:     Finished server process [3683]\n",
+    "rag": "INFO:     Started server process [3676]\nINFO:     Waiting for application startup.\nINFO:     Application startup complete.\nINFO:     Uvicorn running on http://127.0.0.1:33015 (Press CTRL+C to quit)\nINFO:     127.0.0.1:44050 - \"GET /live HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:44050 - \"GET /health HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:44050 - \"POST /documents HTTP/1.1\" 201 Created\nINFO:     127.0.0.1:44056 - \"POST /query HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:44072 - \"POST /query HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:39486 - \"POST /query HTTP/1.1\" 200 OK\nINFO:     127.0.0.1:39494 - \"POST /query HTTP/1.1\" 200 OK\nINFO:     Shutting down\nINFO:     Waiting for application shutdown.\nINFO:     Application shutdown complete.\nINFO:     Finished server process [3676]\n"
+  },
+  "browser_closed": true,
+  "cleanup_completed": true,
+  "elapsed_seconds": 26.789,
+  "measured_at": "2026-11-23T13:18:27.833218+00:00"
+}

@@ -14,6 +14,7 @@ results and both remain visible in the [full system report](../reports/qwen-live
 | Direct/gateway performance comparison | **Not permitted** | Descriptive timings are retained; `speedup_computed` is `false` |
 | Agentic feature CI | **Passed** | All eight jobs in run `45174330740`; 939 distinct pytest cases including the actual S3 test |
 | RAG feature publication | **Merged; master CI passed** | PR #14 and run `45169626126` |
+| Post-merge browser fixture follow-up | **Release-order correction; original failure preserved** | The original master run stopped at 4/12 browser checks; the real PostgreSQL counterexample and corrected gate are described below |
 | Fresh native-checkpoint admission replay | **Completed; quality failed** | 21/21 correctness checks, 7/11 quality gates; exit 2, promotion failed; profile remains disabled by default |
 | Agentic evidence publication | [PR #11 and current checks](https://github.com/MasterLKH180cm/agentic-system/pull/11/checks) | The PR records the final commit's checks and merge state; the first feature run below identifies its own tested revision |
 
@@ -287,6 +288,49 @@ The recorded first-feature run above verifies `9ca69e2`; it must not be
 relabeled as a later run. The subsequent update retains measured production
 source bytes and adds the reports, standalone analysis utilities, documentation
 and the explicitly recorded AST-equivalent harness formatting clarification.
+
+### Post-merge browser fixture correction
+
+The initial merged-master run
+[45182395133](https://github.com/MasterLKH180cm/agentic-system/actions/runs/45182395133)
+passed seven jobs but failed its browser job after four of twelve checks. Its
+[original report](../reports/qwen-browser-master-failure-20261123.json) and
+[artifact provenance](../reports/qwen-browser-master-failure-20261123-provenance.json)
+remain separate from the preceding green feature runs.
+
+The stream-ownership fixture held two real RAG responses, released the first,
+then waited for the entire first workflow before releasing the second.
+PostgreSQL `SKIP LOCKED` can legitimately select the newer retrieval before the
+older dependent synthesis. With one worker, the held second response then
+prevented the first workflow from finishing within the fixture's terminal wait.
+The original logs are consistent with this order but did not include enough
+step state to identify the particular lock holder.
+
+A [controlled real PostgreSQL counterexample](../reports/browser-stream-evidence-20261123/counterexample.json)
+demonstrated that order using one temporary `SELECT FOR UPDATE` row lock, without
+database data edits or production monkeypatches. After the lock was released,
+the first synthesis remained pending while the second retrieval was held; a
+bounded one-second terminal wait expired. Releasing the second response then
+let both workflows complete with the correct evidence, each step attempted
+once. This is a scheduling proof, not a browser pass or a performance benchmark;
+its [helper and provenance](../reports/browser-stream-evidence-20261123/provenance.json)
+retain those limits.
+
+The corrected browser fixture observes the first retrieval's durable completion,
+checks view and credential ownership while the second response is still held,
+then releases both responses before waiting for either complete workflow. It
+checks both terminal streams against durable events and adds bounded failure
+snapshots of the two workflow/step states and proxy gates. All twelve checks,
+one-worker concurrency and existing deadlines remain unchanged. Production
+source and the Qwen measurement inputs are unchanged.
+
+Local system Chromium could not launch because its Unix socket was blocked;
+the one official matching headless-shell installation attempt failed with CDN
+HTTP 403. These local attempts completed zero browser checks and are recorded
+as [environment blocked](../reports/browser-stream-evidence-20261123/environment-blocked.json).
+The [follow-up branch's exact-revision CI](https://github.com/MasterLKH180cm/agentic-system/actions?query=branch%3Afix%2Fbrowser-stream-gate-order-20261123)
+provides the actual Chromium gate. No local browser success is inferred from
+the PostgreSQL counterexample or from the preceding feature CI.
 
 ## Fresh native admission replay — completed, quality failed
 

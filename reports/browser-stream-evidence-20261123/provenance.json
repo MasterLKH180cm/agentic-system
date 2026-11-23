@@ -1,0 +1,102 @@
+{
+  "schema_version": "browser-held-gate-provenance-v1",
+  "kind": "standalone_operator_counterexample_not_production_api",
+  "created_at": "2026-11-23T13:28:42.813272+00:00",
+  "source_commit": "17273ada52932bda9a14229c4d2f2c1d3d377e0e",
+  "source_binding": "The six runtime/support source hashes recorded in the raw report match this commit and the files at preservation time; unrelated uncommitted browser-test/spec edits were not imported by this counterexample.",
+  "artifacts": {
+    "counterexample.py": {
+      "sha256": "c836b09a43c6270102f4776105aa2e2c3b3689814ff49e69ef3cc07767b90db4",
+      "bytes": 10201,
+      "original_path": "/workspace/scratch/7113f13a25c9/browser_gate_counterexample.py",
+      "copied_verbatim": true
+    },
+    "counterexample.json": {
+      "sha256": "912fe883f6e2a9565a03d2287da22f602f523f0301eaa08edb6e735f7e229773",
+      "bytes": 7444,
+      "original_path": "/workspace/scratch/7113f13a25c9/browser-gate-counterexample-20261123.json",
+      "copied_verbatim": true
+    }
+  },
+  "runtime_source_sha256": {
+    "agentic/store.py": "f3b70b2a2a81d777549295b95f7f3596fc882ce46357c3ddd9c5b842d4678cec",
+    "agentic/postgres.py": "b0cf5b77b4374d35018870aff1c52df96bb441550a923fe7b649c51a9f2fd4a7",
+    "agentic/worker.py": "6828a5d6d38ec42d5d48ab8f8cea9b58354c2a6971c10e5c1db71e54eeb8bd76",
+    "agentic/api.py": "394ed1f95776728fdceac62f62606e28c87064c9dab5ae658dfae5c3fc9c493c",
+    "agentic/interfaces.py": "e8013046cfe5cf1aff64f23f962e9dd29d9157f9b383ea4201338d1a7447af51",
+    "tests/e2e_support.py": "a15a4af047f1ecdc44e7c3ef38b5133f6c82e352bb2078f8f303e96176116bde"
+  },
+  "runtime_inventory": {
+    "observation": "Collected immediately after execution from the same unchanged virtual environment; versions were not separately instrumented inside the original raw report.",
+    "python_executable": "/workspace/scratch/7113f13a25c9/agentic-system/.venv/bin/python",
+    "python_version": "3.12.14",
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "packages": {
+      "psycopg": "3.3.9",
+      "httpx": "0.28.1",
+      "pydantic": "2.14.4",
+      "uvicorn": "0.54.0"
+    },
+    "postgres_binary": "/workspace/scratch/862e8f750760/pg-build/install/bin/postgres",
+    "postgres_version": "postgres (PostgreSQL) 17.12"
+  },
+  "execution": {
+    "started_at": "2026-11-23T13:26:20.810431+00:00",
+    "finished_at": "2026-11-23T13:26:26.698358+00:00",
+    "elapsed_seconds": 5.887607365000804,
+    "storage": {
+      "agent": {
+        "backend": "postgresql",
+        "memory_search": "lexical"
+      },
+      "rag": {
+        "backend": "postgresql",
+        "vector_search": "pgvector_exact"
+      }
+    },
+    "settings": {
+      "AGENT_MAX_PARALLEL": "1",
+      "AGENT_LEASE_SECONDS": "0.6",
+      "AGENT_HEARTBEAT_SECONDS": "0.1",
+      "AGENT_STEP_TIMEOUT_SECONDS": "45",
+      "AGENT_RAG_TIMEOUT_SECONDS": "30"
+    },
+    "model_provider": "offline",
+    "rag_model_provider": "extractive",
+    "rag_embedding_provider": "local",
+    "rag_admission_policy": "compatibility",
+    "protocol": [
+      "Start actual API/RAG services with disposable PostgreSQL/pgvector; stop the empty initial worker.",
+      "Submit first workflow via HTTP and execute one real Worker.once child to commit retrieval while its synthesis remains pending.",
+      "Submit second workflow via HTTP with its real RAG response held at the existing local fault proxy.",
+      "Temporarily hold SELECT FOR UPDATE on the first synthetic run; start a normal independent single-slot worker and observe its claim of the second retrieval.",
+      "Release the database lock; confirm a one-second terminal wait for first times out while first synthesis is pending and second retrieval is leased.",
+      "Release second response; require both workflows completed with real grounded answers/citations and every step attempted once."
+    ],
+    "database_lock": "Ordinary PostgreSQL transaction containing only SET LOCAL and SELECT FOR UPDATE, with no data mutation. PostgreSQL READ ONLY transactions do not permit FOR UPDATE.",
+    "cleanup_completed": true
+  },
+  "reproduction": {
+    "working_directory": "/workspace/scratch/7113f13a25c9/agentic-system",
+    "command": "env -u ALL_PROXY -u all_proxy -u HTTP_PROXY -u http_proxy -u HTTPS_PROXY -u https_proxy .venv/bin/python /workspace/scratch/7113f13a25c9/with_test_services.py -- .venv/bin/python reports/browser-stream-evidence-20261123/counterexample.py --output /workspace/scratch/7113f13a25c9/browser-gate-counterexample-new.json",
+    "operator_specific_paths": {
+      "hardcoded_helper_ROOT": "/workspace/scratch/7113f13a25c9/agentic-system",
+      "disposable_service_wrapper": "/workspace/scratch/7113f13a25c9/with_test_services.py",
+      "disposable_service_wrapper_sha256": "a0718227708b2163c5049ce9f86901a4dcf4c2fcb933ba437981a670456509f6",
+      "wrapper_default_postgres_bin": "/workspace/scratch/862e8f750760/pg-build/install/bin"
+    },
+    "requirements": "The existing Python environment must import both repositories and psycopg; the external service wrapper and PostgreSQL installation with pgvector must be available. Choose a new output path: the helper deliberately refuses to overwrite existing evidence.",
+    "portability": "The exact helper is preserved without generalizing operator-specific paths. These three evidence files alone are not a self-contained service installation."
+  },
+  "artifact_limits": [
+    "The transient lock deliberately forces a legally permitted SKIP LOCKED schedule. This demonstrates the previous FIFO/terminal-wait assumption is invalid; it does not identify which concurrent transaction held a row in the original CI failure.",
+    "This counterexample uses real HTTP services, PostgreSQL/pgvector and workers, but does not launch Chromium or validate the twelve browser checks; the separate fixed browser gate provides that evidence.",
+    "The bounded negative observation is approximately one second, not the CI twenty-second wait. Production RAG/step deadlines remain unchanged and eventually bound the held request; no permanent production deadlock is claimed.",
+    "All workflows, document content, run identifiers and credentials are disposable test fixtures. The raw report retains only allowlisted step/event metadata and source hashes; it contains no credential values, provider response bodies, prompts, result content or database URLs. The exact helper includes the two fixed public fixture questions and expected answer fragment needed to reproduce its assertions.",
+    "Observed execution time is operator proof timing, not a performance benchmark."
+  ],
+  "sensitive_data_review": {
+    "reviewed": true,
+    "result": "Only public fixture configuration, synthetic identifiers, allowlisted state/event metadata and local source paths are present. Credential marker/URL scans and structured raw-report inspection found no credential values."
+  }
+}

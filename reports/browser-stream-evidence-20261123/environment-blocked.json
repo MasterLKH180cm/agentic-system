@@ -1,0 +1,41 @@
+{
+  "schema_version": "browser-local-environment-v1",
+  "recorded_at": "2026-11-23T13:27:42.309244+00:00",
+  "status": "blocked",
+  "baseline_commit": "17273ada52932bda9a14229c4d2f2c1d3d377e0e",
+  "baseline_attempt": {
+    "report": "report.json",
+    "console": "console.log",
+    "playwright_version": "1.62.0",
+    "installed_chromium_version": "156.0.8078.79",
+    "chromium_executable": "/usr/lib/chromium/chromium",
+    "actual_storage": {
+      "rag": {
+        "backend": "postgresql",
+        "vector_search": "pgvector_exact"
+      },
+      "agent": {
+        "backend": "postgresql",
+        "memory_search": "lexical"
+      }
+    },
+    "browser_checks_executed": 0,
+    "browser_launch_error": "ProcessSingleton socket() failed: Operation not permitted (EPERM)",
+    "elapsed_seconds": 3.405,
+    "cleanup_completed": true,
+    "interpretation": "Browser launch was blocked before any workflow/UI checks; this is not a reproduction or disproof of the workflow scheduling race."
+  },
+  "official_headless_shell_install": {
+    "command": "/workspace/scratch/7113f13a25c9/agentic-system/.venv/bin/python -m playwright install --only-shell chromium",
+    "invocations": 1,
+    "browser_version": "151.0.7922.34",
+    "playwright_revision": "1234",
+    "url": "https://cdn.playwright.dev/builds/cft/151.0.7922.34/linux64/chrome-headless-shell-linux64.zip",
+    "exit_code": 1,
+    "failure": "CDN HTTP 403 Site Unavailable; installer built-in retries also failed",
+    "expected_install_path": "/home/agent/.cache/ms-playwright/chromium_headless_shell-1234",
+    "install_path_exists": false
+  },
+  "fixed_browser_e2e_executed_locally": false,
+  "scope": "No source or production changes, no unsafe browser flags, no sandbox escalation or alternate download endpoint. Matching Chromium 151 CI remains the authoritative real-browser gate."
+}

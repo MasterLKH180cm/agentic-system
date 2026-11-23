@@ -101,7 +101,18 @@ their independent processes. Compare numbers using the same scope.
   The new view must not receive the old workflow's events or cursor. Same-run
   reconnect may use only that run's observed cursor. Credential changes cancel
   the old stream and invalidate stale asynchronous responses.
+- Held-response coordination must not assume FIFO workflow completion.
+  PostgreSQL may legally skip a locked older run and give the sole worker a
+  newer held retrieval. After releasing the older response, observe its durable
+  retrieval checkpoint; exercise view and credential switching while the newer
+  response remains held. Release every such hold before waiting for either
+  complete workflow, then verify both terminal streams against durable events.
+  Preserve all twelve browser checks, the single worker and existing deadlines.
 - Save failure diagnostics and representative screenshots with JSON evidence.
+  A stream-ownership failure also records a bounded synthetic checkpoint of both
+  workflow/step states and the two proxy gates before service teardown. Diagnostic
+  failure must not replace the original assertion; omit prompts, result bodies,
+  credentials and free-form exception text from this checkpoint.
   Do not relax CSP, add production test hooks or silently skip a missing browser.
 
 ## T-AG-06: complete CI and review

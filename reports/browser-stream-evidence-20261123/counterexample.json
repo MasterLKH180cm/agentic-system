@@ -1,0 +1,274 @@
+{
+  "schema_version": "browser-held-gate-counterexample-v1",
+  "status": "passed",
+  "started_at": "2026-11-23T13:26:20.810431+00:00",
+  "synthetic_only": true,
+  "model_provider": "offline",
+  "injected_faults": [
+    "temporary SELECT FOR UPDATE row lock",
+    "hold second real RAG response at local proxy"
+  ],
+  "direct_database_data_mutations": false,
+  "production_monkeypatches": false,
+  "source_hashes": {
+    "agentic/store.py": "f3b70b2a2a81d777549295b95f7f3596fc882ce46357c3ddd9c5b842d4678cec",
+    "agentic/postgres.py": "b0cf5b77b4374d35018870aff1c52df96bb441550a923fe7b649c51a9f2fd4a7",
+    "agentic/worker.py": "6828a5d6d38ec42d5d48ab8f8cea9b58354c2a6971c10e5c1db71e54eeb8bd76",
+    "agentic/api.py": "394ed1f95776728fdceac62f62606e28c87064c9dab5ae658dfae5c3fc9c493c",
+    "agentic/interfaces.py": "e8013046cfe5cf1aff64f23f962e9dd29d9157f9b383ea4201338d1a7447af51",
+    "tests/e2e_support.py": "a15a4af047f1ecdc44e7c3ef38b5133f6c82e352bb2078f8f303e96176116bde"
+  },
+  "helper_sha256": "c836b09a43c6270102f4776105aa2e2c3b3689814ff49e69ef3cc07767b90db4",
+  "checkpoints": [
+    {
+      "label": "first_retrieval_committed",
+      "at": "2026-11-23T13:26:23.337549+00:00",
+      "first": {
+        "id": "dadde996-aae7-4cb9-9abe-3baccec86cab",
+        "status": "running",
+        "steps": [
+          {
+            "id": "retrieve",
+            "tool": "rag.search",
+            "status": "completed",
+            "attempts": 1,
+            "outcome": null
+          },
+          {
+            "id": "synthesize",
+            "tool": "model.summarize",
+            "status": "pending",
+            "attempts": 0,
+            "outcome": null
+          }
+        ]
+      }
+    },
+    {
+      "label": "skip_locked_selected_second",
+      "at": "2026-11-23T13:26:25.103242+00:00",
+      "first": {
+        "id": "dadde996-aae7-4cb9-9abe-3baccec86cab",
+        "status": "running",
+        "steps": [
+          {
+            "id": "retrieve",
+            "tool": "rag.search",
+            "status": "completed",
+            "attempts": 1,
+            "outcome": null
+          },
+          {
+            "id": "synthesize",
+            "tool": "model.summarize",
+            "status": "pending",
+            "attempts": 0,
+            "outcome": null
+          }
+        ]
+      },
+      "second": {
+        "id": "32ae213e-b31d-4127-b0ad-d988f5a530ca",
+        "status": "running",
+        "steps": [
+          {
+            "id": "retrieve",
+            "tool": "rag.search",
+            "status": "leased",
+            "attempts": 1,
+            "outcome": null
+          },
+          {
+            "id": "synthesize",
+            "tool": "model.summarize",
+            "status": "pending",
+            "attempts": 0,
+            "outcome": null
+          }
+        ]
+      },
+      "second_gate_forwarded": 1,
+      "second_gate_released": false
+    },
+    {
+      "label": "terminal_wait_cannot_progress_with_second_gate_held",
+      "at": "2026-11-23T13:26:26.161351+00:00",
+      "first": {
+        "id": "dadde996-aae7-4cb9-9abe-3baccec86cab",
+        "status": "running",
+        "steps": [
+          {
+            "id": "retrieve",
+            "tool": "rag.search",
+            "status": "completed",
+            "attempts": 1,
+            "outcome": null
+          },
+          {
+            "id": "synthesize",
+            "tool": "model.summarize",
+            "status": "pending",
+            "attempts": 0,
+            "outcome": null
+          }
+        ]
+      },
+      "second": {
+        "id": "32ae213e-b31d-4127-b0ad-d988f5a530ca",
+        "status": "running",
+        "steps": [
+          {
+            "id": "retrieve",
+            "tool": "rag.search",
+            "status": "leased",
+            "attempts": 1,
+            "outcome": null
+          },
+          {
+            "id": "synthesize",
+            "tool": "model.summarize",
+            "status": "pending",
+            "attempts": 0,
+            "outcome": null
+          }
+        ]
+      },
+      "bounded_wait_seconds": 1.0430511649992695,
+      "first_terminal_wait_timed_out": true,
+      "second_gate_forwarded": 1,
+      "second_gate_finished": 0
+    },
+    {
+      "label": "both_complete_after_second_gate_release",
+      "at": "2026-11-23T13:26:26.227391+00:00",
+      "first": {
+        "id": "dadde996-aae7-4cb9-9abe-3baccec86cab",
+        "status": "completed",
+        "steps": [
+          {
+            "id": "retrieve",
+            "tool": "rag.search",
+            "status": "completed",
+            "attempts": 1,
+            "outcome": null
+          },
+          {
+            "id": "synthesize",
+            "tool": "model.summarize",
+            "status": "completed",
+            "attempts": 1,
+            "outcome": "success"
+          }
+        ]
+      },
+      "second": {
+        "id": "32ae213e-b31d-4127-b0ad-d988f5a530ca",
+        "status": "completed",
+        "steps": [
+          {
+            "id": "retrieve",
+            "tool": "rag.search",
+            "status": "completed",
+            "attempts": 1,
+            "outcome": null
+          },
+          {
+            "id": "synthesize",
+            "tool": "model.summarize",
+            "status": "completed",
+            "attempts": 1,
+            "outcome": "success"
+          }
+        ]
+      },
+      "grounded_answer_checks": 2,
+      "second_gate_finished": 1
+    }
+  ],
+  "storage": {
+    "agent": {
+      "backend": "postgresql",
+      "memory_search": "lexical"
+    },
+    "rag": {
+      "backend": "postgresql",
+      "vector_search": "pgvector_exact"
+    }
+  },
+  "settings": {
+    "AGENT_MAX_PARALLEL": "1",
+    "AGENT_LEASE_SECONDS": "0.6",
+    "AGENT_HEARTBEAT_SECONDS": "0.1",
+    "AGENT_STEP_TIMEOUT_SECONDS": "45",
+    "AGENT_RAG_TIMEOUT_SECONDS": "30"
+  },
+  "events": {
+    "first": [
+      {
+        "id": 1,
+        "run_id": "dadde996-aae7-4cb9-9abe-3baccec86cab",
+        "step_id": null,
+        "type": "created"
+      },
+      {
+        "id": 2,
+        "run_id": "dadde996-aae7-4cb9-9abe-3baccec86cab",
+        "step_id": "retrieve",
+        "type": "started"
+      },
+      {
+        "id": 3,
+        "run_id": "dadde996-aae7-4cb9-9abe-3baccec86cab",
+        "step_id": "retrieve",
+        "type": "completed"
+      },
+      {
+        "id": 7,
+        "run_id": "dadde996-aae7-4cb9-9abe-3baccec86cab",
+        "step_id": "synthesize",
+        "type": "started"
+      },
+      {
+        "id": 8,
+        "run_id": "dadde996-aae7-4cb9-9abe-3baccec86cab",
+        "step_id": "synthesize",
+        "type": "completed"
+      }
+    ],
+    "second": [
+      {
+        "id": 4,
+        "run_id": "32ae213e-b31d-4127-b0ad-d988f5a530ca",
+        "step_id": null,
+        "type": "created"
+      },
+      {
+        "id": 5,
+        "run_id": "32ae213e-b31d-4127-b0ad-d988f5a530ca",
+        "step_id": "retrieve",
+        "type": "started"
+      },
+      {
+        "id": 6,
+        "run_id": "32ae213e-b31d-4127-b0ad-d988f5a530ca",
+        "step_id": "retrieve",
+        "type": "completed"
+      },
+      {
+        "id": 9,
+        "run_id": "32ae213e-b31d-4127-b0ad-d988f5a530ca",
+        "step_id": "synthesize",
+        "type": "started"
+      },
+      {
+        "id": 10,
+        "run_id": "32ae213e-b31d-4127-b0ad-d988f5a530ca",
+        "step_id": "synthesize",
+        "type": "completed"
+      }
+    ]
+  },
+  "cleanup_completed": true,
+  "elapsed_seconds": 5.887607365000804,
+  "finished_at": "2026-11-23T13:26:26.698358+00:00"
+}
