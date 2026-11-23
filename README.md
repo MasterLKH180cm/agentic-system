@@ -21,6 +21,12 @@ identity, persistence, and telemetry adapters. See the
 [v0.3 verification ledger](docs/IMPLEMENTATION_REVIEW_V03.md) for the implementation
 contract, executed checks, and remaining boundaries.
 
+The [whole-code review corrections](#whole-code-review-corrections) tighten
+namespace-scoped usage, persistence concurrency and MCP provider validation.
+An [optional shared LiteLLM gateway](docs/LITELLM.md) connects generation in
+both applications; default Agentic generation stays offline and RAG embeddings
+stay local unless explicitly configured otherwise.
+
 ## Contents
 
 - [12-layer coverage](#12-layer-coverage)
@@ -31,6 +37,7 @@ contract, executed checks, and remaining boundaries.
 - [Evidence decisions and refusal](#evidence-decisions-and-refusal)
 - [Parallel steps and approval](#parallel-steps-and-approval)
 - [Models and budgets](#models-and-budgets)
+- [Optional shared LiteLLM gateway](#optional-shared-litellm-gateway)
 - [Feature configuration](#feature-configuration)
 - [Deployment configuration](#deployment-configuration)
 - [Python environments with uv](#python-environments-with-uv)
@@ -82,6 +89,11 @@ flowchart TD
 
 The supplied [Compose stack](compose.yaml) runs `postgres`, `api`, `worker` and `rags` as separate containers. RAG and Agent use separate PostgreSQL databases/application roles; named application volumes retain artifacts, caches and any legacy SQLite files. [Architecture details](docs/ARCHITECTURE.md) explain recovery,
 authorization, budgets, and optional infrastructure.
+
+The model gateway in this diagram is Agentic's own routing/accounting adapter.
+The optional [LiteLLM overlay](compose.litellm.yaml) adds a separate generation
+proxy downstream of that adapter and RAG's router. Each application retains its
+authorization, durable state and provider-call limits.
 
 ## Quick start
 
@@ -517,12 +529,32 @@ Workflow `max_model_tokens` is bounded by server and policy maxima. To use
 operator; monetary totals are estimates. Inspect `/usage?run_id=ID` or the run's
 `usage`: incomplete pricing makes `estimated_cost_usd` null, while
 `known_cost_usd`, `cost_complete`, and `usage_complete` identify partial totals.
+Namespace-restricted credentials see only calls and totals belonging to runs in
+their allowed namespaces. Usage without a run is visible only to an unrestricted
+tenant principal; an empty namespace allowlist sees no usage.
 
 **Budget scope:** the ledger covers this service's planning and synthesis calls.
 `rag.search` requests retrieval with `generate:false`, but embedding and
 model-assisted retrieval inside RAGs may still incur separate costs. There is
 no aggregate billing cap across both services. The current evaluator is
 deterministic and makes no model-evaluation call.
+
+### Optional shared LiteLLM gateway
+
+The [shared gateway guide](docs/LITELLM.md) supplies a pinned, isolated LiteLLM
+process, optional Compose profile, verified HTTPS and separate model-restricted
+RAG/Agentic keys. The generation alias is
+`gateway/inkling-2-mini-iq4nl-v1`, with OpenAI `max_tokens` semantics and no
+reasoning-effort override. Keep that alias immutable: a model, runtime or
+quantization change requires a new alias and deployment manifest.
+
+Agentic still owns planning validation, run budgets, retries, approvals and
+lease fencing. The supplied proxy disables retries, fallback, cache and
+prompt/response logging. RAG embeddings remain independently configured, with
+local hashing as the default. Both direct providers and the offline deployment
+remain available. Follow the guide for bootstrap, Prisma preparation and the
+direct/proxy comparison; synthetic upstream fixtures establish transport
+behavior, not Inkling inference quality or speed.
 
 ## PostgreSQL concurrency and storage measurement
 
@@ -1000,6 +1032,27 @@ REST API. MCP exposes no approval tool.
 The [uv workflow review](docs/UV_WORKFLOW_REVIEW.md) records this migration's
 local validation and new database-selection tests. The versioned evidence below
 retains its original tested commit and scope.
+
+### Whole-code review corrections
+
+The [execution correction contract](docs/REVIEW_EXECUTION_FIX_SPEC.md) records
+the implemented changes from the 2026-11-23 review:
+
+| Review finding | Current behavior |
+| --- | --- |
+| CR-05: usage scope | Namespace authorization filters both call records and aggregate totals, including legacy/default and unbound usage rules. |
+| CR-08: event-loop blocking | Bounded persistence executors keep database/storage waits off the event loop; lease renewal has separate capacity and late writes retain deadline/fencing checks. |
+| CR-10: MCP provider mismatch | HTTP capabilities and MCP share the resolved provider contract, including `inkling` and explicit `routed` configurations. |
+
+The companion [RAG correction guide](https://github.com/MasterLKH180cm/RAGs/blob/master/docs/LITELLM.md#correctness-upgrade)
+covers the other seven findings: source validity, chunk allocation, complete
+migration, router/federation deadlines, embedding identity, upload responsiveness
+and atomic conversation completion. The [gateway acceptance contract](docs/LITELLM_SPEC.md)
+and [process report](reports/litellm-process-acceptance.json) distinguish actual
+proxy/persistence checks with a synthetic provider from real-model measurements.
+The [review and upgrade report](docs/REVIEW_LITELLM.md) and
+[local validation record](docs/testing-results-review-litellm.json) retain the
+executed application checks, tested source snapshot and remaining boundaries.
 
 ### Verified v0.4 implementation
 

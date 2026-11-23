@@ -10,6 +10,7 @@ from typing import Any, Awaitable, Callable
 import httpx
 
 from agentic.config import Settings
+from agentic.async_io import run_sync
 from agentic.admission import CONTRACT_VERSION, normalize_structured, parse_assessment, require_admission, upstream_identity
 from agentic.evidence import (
     CITATION, SOURCE_ID, SYNTHESIS_SYSTEM, SynthesisEnvelope, collect_evidence,
@@ -228,7 +229,7 @@ class Tools:
         bundle = collect_evidence(inputs, policy=policy, profiles=profiles)
         if not bundle.sources and not bundle.observations:
             return refusal_result(bundle.refusal_reason)
-        capacity = self.model.input_capacity(SYNTHESIS_SYSTEM, tenant=job["tenant"], run_id=job["run_id"])
+        capacity = await run_sync(self.model.input_capacity, SYNTHESIS_SYSTEM, tenant=job["tenant"], run_id=job["run_id"])
         prompt, citations, observations = pack_evidence(question, bundle, limit=capacity)
         if not citations and not observations:
             return refusal_result("context_budget_exhausted", stop_reason="context_budget_exhausted")
@@ -258,7 +259,7 @@ class Tools:
             raise PermissionError("Memory namespace is not allowed")
         if args["namespace"] != job.get("specification", {}).get("memory_namespace", "default"):
             raise PermissionError("Memory tool must use the workflow's bound namespace")
-        rows = self.memory.search(job["tenant"], args["namespace"], args["query"] or job["goal"], args["limit"])
+        rows = await run_sync(self.memory.search, job["tenant"], args["namespace"], args["query"] or job["goal"], args["limit"])
         return self.memory_evidence(rows)
 
     @staticmethod
@@ -273,8 +274,8 @@ class Tools:
         }
 
     async def _publish(self, job, args, inputs) -> dict:
-        reference = await asyncio.to_thread(self.artifacts.put, job["tenant"], inputs)
-        if not self.store.register_artifact(job, reference):
+        reference = await run_sync(self.artifacts.put, job["tenant"], inputs)
+        if not await run_sync(self.store.register_artifact, job, reference):
             raise LeaseLost("Artifact cannot be attached to a cancelled or stale workflow")
         return {"published": True, "scope": "internal-run-record", "data": inputs, "artifact_ref": reference}
 
@@ -292,4 +293,4 @@ class Tools:
                            tenant=job["tenant"], run_id=job["run_id"])
         ControlPlane.validate_steps([Step.model_validate(s.model_dump()) for s in steps], job.get("specification", {}),
                                     features=self.config.features, online=self.config.provider != "offline")
-        return {"planned_steps": self.store.expand_plan(job, steps)}
+        return {"planned_steps": await run_sync(self.store.expand_plan, job, steps)}

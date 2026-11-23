@@ -1,0 +1,46 @@
+# docker compose -f compose.yaml -f compose.litellm.yaml --profile litellm up -d --build
+include:
+  - deploy/litellm/compose.yaml
+
+x-gateway-agent-env: &gateway-agent-env
+  AGENT_MODEL_PROVIDER: openai
+  AGENT_GATEWAY_API_KEY: ''
+  AGENT_GATEWAY_API_KEY_FILE: /app/gateway/api.key
+  AGENT_MODEL_ROUTES_JSON: '[{"name":"inkling-gateway-v1","provider":"openai","model":"gateway/inkling-2-mini-iq4nl-v1","base_url":"https://litellm:4000/v1","api_key_env":"AGENT_GATEWAY_API_KEY","ca_file":"/app/gateway/ca.pem","auth_mode":"required","output_token_parameter":"max_tokens","purposes":["planning","synthesis"]}]'
+
+services:
+  rags:
+    environment:
+      RAGS_MODEL_PROVIDER: router
+      RAGS_GENERATION_MODEL: inkling
+      RAGS_ROUTER_ENABLED: 'true'
+      RAGS_ROUTER_GATEWAY_URL: https://litellm:4000/v1
+      RAGS_ROUTER_AUTH_MODE: required
+      RAGS_ROUTER_API_KEY: ''
+      RAGS_ROUTER_API_KEY_FILE: /app/gateway/api.key
+      RAGS_ROUTER_CA_FILE: /app/gateway/ca.pem
+      RAGS_ROUTER_ALLOW_HTTP: 'false'
+      RAGS_ROUTER_MODELS_JSON: '{"inkling":"gateway/inkling-2-mini-iq4nl-v1"}'
+      RAGS_ROUTER_MODEL_OPTIONS_JSON: '{"inkling":{"protocol":"openai"}}'
+      RAGS_GENERATION_TOKENIZER_JSON: '{"backend":"utf8_bytes"}'
+      RAGS_CONTEXT_BUDGET: '4096'
+      RAGS_OUTPUT_BUDGET: '1024'
+    volumes:
+      - ./data/litellm/rags:/app/gateway:ro
+    depends_on:
+      litellm-init:
+        condition: service_completed_successfully
+  api:
+    environment: *gateway-agent-env
+    volumes:
+      - ./data/litellm/agentic:/app/gateway:ro
+    depends_on:
+      litellm-init:
+        condition: service_completed_successfully
+  worker:
+    environment: *gateway-agent-env
+    volumes:
+      - ./data/litellm/agentic:/app/gateway:ro
+    depends_on:
+      litellm-init:
+        condition: service_completed_successfully

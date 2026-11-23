@@ -1,0 +1,173 @@
+{
+  "schema_version": 1,
+  "scope": "Pinned OCI image signature and actual Compose configuration rendering; no container execution or model inference",
+  "image_signature": {
+    "schema_version": 1,
+    "status": "verified",
+    "image": "ghcr.io/berriai/litellm:v1.110.2@sha256:ef798594ca3db8d81bad2e1439f536f49b71fe095ee9f20416f5e149b4e22035",
+    "verified_at": "2026-11-23T09:55:58.942622+00:00",
+    "release_identity_source": "https://github.com/BerriAI/litellm/releases/tag/v1.110.2",
+    "cosign_version": {
+      "gitVersion": "v3.1.4",
+      "gitCommit": "0e48502cf5ef34e2e60bbd3617aa19945712f705",
+      "gitTreeState": "clean",
+      "buildDate": "2026-10-20T17:33:02Z",
+      "goVersion": "go1.27.3",
+      "compiler": "gc",
+      "platform": "linux/amd64"
+    },
+    "cosign_binary_sha256": "424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa",
+    "compose_source_sha256": "f154ae313be7d6bb7a51ff17415daaff438cfcc0f9f3c8ebc17aaf6c97cafa37",
+    "cosign_output_sha256": "17a538c6ca4d2c9439b7ebe5868e2736b08de0f8b2998747ecb4ac614e30a2dc",
+    "signatures": [
+      {
+        "digest": "sha256:ef798594ca3db8d81bad2e1439f536f49b71fe095ee9f20416f5e149b4e22035",
+        "subject": "https://github.com/BerriAI/project-releaser/.github/workflows/release.yml@refs/heads/main",
+        "issuer": "https://token.actions.githubusercontent.com",
+        "workflow_sha": "ff7354704d3ae5a319e8ca48f0ab17037b042e84",
+        "rekor_log_index": 4016530849,
+        "rekor_integrated_time": 1795147308
+      }
+    ],
+    "container_started": false,
+    "model_inference": false,
+    "compose_source_snapshot": "Historical source at verified_at; later mount and capability changes retain the same verified OCI image digest."
+  },
+  "registry_tag_digest": {
+    "status": "verified",
+    "tag": "v1.110.2",
+    "digest": "sha256:ef798594ca3db8d81bad2e1439f536f49b71fe095ee9f20416f5e149b4e22035",
+    "manifest_bytes": 1611,
+    "media_type": "application/vnd.oci.image.index.v1+json",
+    "platforms": [
+      {
+        "architecture": "amd64",
+        "os": "linux"
+      },
+      {
+        "architecture": "unknown",
+        "os": "unknown"
+      },
+      {
+        "architecture": "arm64",
+        "os": "linux"
+      },
+      {
+        "architecture": "unknown",
+        "os": "unknown"
+      }
+    ],
+    "registry": "ghcr.io",
+    "container_started": false
+  },
+  "compose": {
+    "schema_version": 1,
+    "status": "passed",
+    "compose_version": "5.8.0",
+    "services": [
+      "api",
+      "litellm",
+      "litellm-db",
+      "litellm-init",
+      "postgres",
+      "rags",
+      "worker"
+    ],
+    "gateway_image": "ghcr.io/berriai/litellm:v1.110.2@sha256:ef798594ca3db8d81bad2e1439f536f49b71fe095ee9f20416f5e149b4e22035",
+    "validations": [
+      "actual_compose_include_merge",
+      "production_https",
+      "service_key_mount_isolation",
+      "master_key_absent_from_applications",
+      "startup_dependency_gate",
+      "database_unpublished",
+      "loopback_gateway_port",
+      "actual_agentic_settings_api_and_worker",
+      "private_host_owned_receipt_access",
+      "initializer_minimal_capabilities_and_secret_mounts"
+    ],
+    "source_sha256": {
+      "compose.yaml": "cfeed721f56afaf87235c4498846145b10b1c193e2fb13473426d507a6a9f71d",
+      "compose.litellm.yaml": "e2726f14ce225cea639f410673faf394ffcd54fd83183b9cf57fe23a1dd1e785",
+      "deploy/litellm/compose.yaml": "71a0a03bb2825def179f5741b9c049168e292dab403550f7d630ad2e4909995e",
+      "deploy/litellm/proxy.yaml": "c2b36dc3fdd0ab90945d853b2b1a579587e7f434c81c152084f640ac7c17d0a8",
+      "deploy/litellm/init_keys.py": "7d143f47771a08cc7de6a8e9afd3b7cf62f09a30543f5cd6ff761b2d4e9e410a",
+      "scripts/bootstrap_compose.py": "69070ba6f089e26963a75d33ce5cd22fd6de3aea85861f3a2c610bd19aa679e9",
+      "scripts/bootstrap_litellm.py": "218b91daea5c9812162c84db466f3b326d32c4e8ad69fdef4e60e2f87b5a1506"
+    },
+    "container_execution": false,
+    "model_inference": false,
+    "credentials_redacted": true,
+    "verified_at": "2026-11-23T10:10:27.174442+00:00",
+    "source_snapshot": "Current source files at this Compose rendering; container execution remains unverified locally."
+  },
+  "verification_tools": [
+    {
+      "repo": "sigstore/cosign",
+      "tag": "v3.1.4",
+      "url": "https://github.com/sigstore/cosign/releases/tag/v3.1.4",
+      "assets": [
+        {
+          "name": "cosign-linux-amd64",
+          "digest": "sha256:424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa",
+          "size": 145688404,
+          "url": "https://github.com/sigstore/cosign/releases/download/v3.1.4/cosign-linux-amd64"
+        },
+        {
+          "name": "cosign-linux-amd64.sigstore.json",
+          "digest": "sha256:355244bb0186e950ced20f03106640ba3a4630e1223d0467ff34bcebe10bb18a",
+          "size": 6747,
+          "url": "https://github.com/sigstore/cosign/releases/download/v3.1.4/cosign-linux-amd64.sigstore.json"
+        },
+        {
+          "name": "cosign_checksums.txt",
+          "digest": "sha256:e70e59b328d52949b3a9ae3e0d04721ea8f380c4e91c28197aa91df02afbf4c0",
+          "size": 3906,
+          "url": "https://github.com/sigstore/cosign/releases/download/v3.1.4/cosign_checksums.txt"
+        }
+      ]
+    },
+    {
+      "repo": "docker/compose",
+      "tag": "v5.8.0",
+      "url": "https://github.com/docker/compose/releases/tag/v5.8.0",
+      "assets": [
+        {
+          "name": "checksums.txt",
+          "digest": "sha256:c5e5b8306f9ddf54ebc1e0686c48df7e700942b4bd90216879d0324952625d8f",
+          "size": 4616,
+          "url": "https://github.com/docker/compose/releases/download/v5.8.0/checksums.txt"
+        },
+        {
+          "name": "docker-compose-linux-x86_64",
+          "digest": "sha256:b8840f5008c447f41fce0a57ae3adeab42c89b1eb6e6012524bcabbfb4ffbaf6",
+          "size": 34442228,
+          "url": "https://github.com/docker/compose/releases/download/v5.8.0/docker-compose-linux-x86_64"
+        },
+        {
+          "name": "docker-compose-linux-x86_64.sha256",
+          "digest": "sha256:c4317939c6176b9708fb69837f724aa34ee954fc0347c5472868b84043eb513a",
+          "size": 94,
+          "url": "https://github.com/docker/compose/releases/download/v5.8.0/docker-compose-linux-x86_64.sha256"
+        }
+      ]
+    }
+  ],
+  "download_validation": "Binary byte counts and SHA-256 values matched GitHub release asset metadata and separately downloaded official checksum files.",
+  "actual_cosign_verification_output": [
+    "Verification for ghcr.io/berriai/litellm@sha256:ef798594ca3db8d81bad2e1439f536f49b71fe095ee9f20416f5e149b4e22035 --",
+    "The following checks were performed on each of these signatures:",
+    "  - The cosign claims were validated",
+    "  - Existence of the claims in the transparency log was verified offline",
+    "  - The code-signing certificate was verified using trusted certificate authority certificates"
+  ],
+  "verification_script_sha256": {
+    "scripts/verify_litellm_image.py": "25adc758337cd774d2d0595536bd450f6611bfe481add6f7a5c8bb9a295c10c3",
+    "scripts/verify_litellm_image.sh": "846bca37e053d2ef8865862b041af7eb69d8896dc35d9f8967f088f6808edeb6",
+    "scripts/check_litellm_compose.py": "48808e3296834449a243b0c8898a2e121fa1907f24752ce7ae7f1647edbcfba4"
+  },
+  "reproduce": [
+    "sh scripts/verify_litellm_image.sh --report reports/testing/litellm-image-signature.json",
+    "uv run --no-sync python scripts/check_litellm_compose.py --report reports/testing/litellm-compose-config.json"
+  ]
+}

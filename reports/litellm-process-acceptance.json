@@ -1,0 +1,120 @@
+{
+  "schema_version": "litellm-process-acceptance-v1",
+  "created_at": "2026-11-23T10:11:50.137844+00:00",
+  "status": "passed",
+  "evidence_kind": "actual_gateway_synthetic_upstream",
+  "model_inference_executed": false,
+  "gateway_version": "1.110.2",
+  "checks": [
+    {
+      "name": "actual_pinned_proxy_with_postgres_and_verified_tls",
+      "status": "passed"
+    },
+    {
+      "name": "idempotent_distinct_service_key_provisioning",
+      "status": "passed"
+    },
+    {
+      "name": "rags_key_model_and_endpoint_isolation",
+      "status": "passed"
+    },
+    {
+      "name": "agentic_key_model_and_endpoint_isolation",
+      "status": "passed"
+    },
+    {
+      "name": "denied_credentials_and_routes_make_zero_upstream_calls",
+      "status": "passed"
+    },
+    {
+      "name": "rags_production_router_generation_usage",
+      "status": "passed"
+    },
+    {
+      "name": "rags_tool_json_and_truncated_tool_rejection",
+      "status": "passed"
+    },
+    {
+      "name": "native_agent_public_state_and_history_exclude_reasoning",
+      "status": "passed"
+    },
+    {
+      "name": "rags_production_providers_generation_and_truncation",
+      "status": "passed"
+    },
+    {
+      "name": "agentic_real_model_gateway_reported_usage_unknown_cost",
+      "status": "passed"
+    },
+    {
+      "name": "agentic_truncation_keeps_provider_usage",
+      "status": "passed"
+    },
+    {
+      "name": "rags_complete_100ms_deadline",
+      "status": "passed",
+      "elapsed_seconds": 0.1012
+    },
+    {
+      "name": "agentic_complete_100ms_deadline",
+      "status": "passed",
+      "elapsed_seconds": 0.1059
+    },
+    {
+      "name": "single_upstream_attempt_without_retry_or_fallback",
+      "status": "passed"
+    },
+    {
+      "name": "timeout_reservation_is_conservatively_settled",
+      "status": "passed"
+    },
+    {
+      "name": "deleted_service_key_is_never_resurrected_by_provisioning",
+      "status": "passed"
+    },
+    {
+      "name": "gateway_process_logs_exclude_fixture_prompt_and_reasoning",
+      "status": "passed"
+    }
+  ],
+  "gateway_store_backend": "postgresql",
+  "application_store_backend": "sqlite",
+  "full_two_service_http_worker_exercised": false,
+  "stage": "completed",
+  "gateway_runtime": {
+    "python": "3.12.14",
+    "packages": {
+      "litellm": "1.110.2",
+      "prisma": "0.15.0",
+      "httpx": "0.28.1",
+      "fastapi": "0.165.0"
+    }
+  },
+  "source_sha256": {
+    "deploy/litellm/proxy.yaml": "c2b36dc3fdd0ab90945d853b2b1a579587e7f434c81c152084f640ac7c17d0a8",
+    "deploy/litellm/init_keys.py": "7d143f47771a08cc7de6a8e9afd3b7cf62f09a30543f5cd6ff761b2d4e9e410a",
+    "scripts/bootstrap_litellm.py": "218b91daea5c9812162c84db466f3b326d32c4e8ad69fdef4e60e2f87b5a1506",
+    "scripts/check_litellm.py": "82934081527b9cb4c0aaf1962038319d76800a1e5af876d7d381773960fe80ce"
+  },
+  "gateway_database_version": "17.12",
+  "upstream_request_counts": {
+    "normal": 2,
+    "reasoning": 2,
+    "slow": 2,
+    "tool": 1,
+    "transient": 1,
+    "truncated": 2,
+    "truncated_tool": 1
+  },
+  "agentic_usage": {
+    "calls": 3,
+    "charged_tokens": 310,
+    "usage_complete": false,
+    "cost_complete": false,
+    "statuses": [
+      "reported",
+      "reported",
+      "uncertain_timeout"
+    ]
+  }
+}

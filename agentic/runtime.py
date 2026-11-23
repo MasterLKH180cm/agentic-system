@@ -11,6 +11,7 @@ from agentic.planner import plan
 from agentic.schemas import Step
 from agentic.schemas import offline_plan
 from agentic.store import LeaseLost, Store
+from agentic.async_io import run_sync
 
 
 def evaluate(goal: str, observations: dict, evaluator: str, memory_evidence: dict | None = None,
@@ -96,8 +97,8 @@ class AgentRuntime:
     def __init__(self, store: Store, tools):
         self.store, self.tools = store, tools
 
-    def save(self, job: dict, state: dict, event: str, details: dict) -> None:
-        if not self.store.checkpoint(job, state, event=event, details=details):
+    async def save(self, job: dict, state: dict, event: str, details: dict) -> None:
+        if not await run_sync(self.store.checkpoint, job, copy.deepcopy(state), event=event, details=details):
             raise LeaseLost("Runtime lease or workflow is no longer active")
 
     async def run(self, job: dict) -> dict:
@@ -124,10 +125,10 @@ class AgentRuntime:
             memories = []
             if "memory.search" in specification.get("allowed_tools", []):
                 features.require("memory", snapshot)
-                memories = self.tools.memory.search(job["tenant"], namespace, job["goal"], 5)
+                memories = await run_sync(self.tools.memory.search, job["tenant"], namespace, job["goal"], 5)
             state = {"version": CONTRACT_VERSION, "round": 1, "plan": None, "cursor": 0, "observations": {},
                      "evaluations": [], "evaluation": None, "memory": self.tools.memory_evidence(memories)}
-            self.save(job, state, "runtime_started", {"max_rounds": specification["max_rounds"]})
+            await self.save(job, state, "runtime_started", {"max_rounds": specification["max_rounds"]})
         while state["round"] <= specification["max_rounds"]:
             if state["plan"] is None:
                 feedback = state["evaluations"][-1] if state["evaluations"] else None
@@ -139,7 +140,7 @@ class AgentRuntime:
                 ControlPlane.validate_steps(steps, specification, loop=True, features=features,
                                             online=self.tools.config.provider != "offline")
                 state["plan"] = [step.model_dump() for step in steps]
-                self.save(job, state, "round_planned", {"round": state["round"], "steps": len(steps)})
+                await self.save(job, state, "round_planned", {"round": state["round"], "steps": len(steps)})
             steps = [Step.model_validate(s) for s in state["plan"]]
             ControlPlane.validate_steps(steps, specification, loop=True, features=features,
                                         online=self.tools.config.provider != "offline")
@@ -156,7 +157,7 @@ class AgentRuntime:
                 result = await self.tools.execute(nested_job, inputs)
                 state["observations"][step.id] = {"tool": step.tool, "result": bounded_result(result)}
                 state["cursor"] = len(state["observations"])
-                self.save(job, state, "tool_observed", {"round": state["round"], "tool": step.tool,
+                await self.save(job, state, "tool_observed", {"round": state["round"], "tool": step.tool,
                                                        "cursor": state["cursor"], **safe_metadata(result, profiles)})
             assessment = state.get("evaluation")
             if assessment is None:
@@ -165,7 +166,7 @@ class AgentRuntime:
                 summary = {key: value for key, value in assessment.items() if key not in {"answer", "citations", "observations"}}
                 state["evaluations"].append({"round": state["round"], **summary})
                 state["evaluation"] = assessment
-                self.save(job, state, "round_evaluated", {"round": state["round"], **summary})
+                await self.save(job, state, "round_evaluated", {"round": state["round"], **summary})
             if assessment["accepted"]:
                 result = {"outcome": "success", "stop_reason": assessment["reason"],
                           "answer": assessment["answer"], "citations": assessment["citations"],
@@ -173,16 +174,16 @@ class AgentRuntime:
                           "rounds": state["round"], "evaluations": state["evaluations"],
                           "evidence_contract_version": CONTRACT_VERSION}
                 state.update(finished=True, result=result)
-                self.save(job, state, "runtime_finished", {"outcome": "success", "rounds": state["round"]})
+                await self.save(job, state, "runtime_finished", {"outcome": "success", "rounds": state["round"]})
                 return result
             state["last_refusal_reason"] = assessment.get("refusal_reason") or "model_rejected"
             state.update(round=state["round"] + 1, plan=None, cursor=0, observations={}, evaluation=None)
-            self.save(job, state, "runtime_replan", {"round": state["round"], "reason": assessment["reason"]})
+            await self.save(job, state, "runtime_replan", {"round": state["round"], "reason": assessment["reason"]})
         result = {"outcome": "insufficient_evidence", "stop_reason": "rounds_exhausted",
                   "answer": "Insufficient evidence after the bounded refinement rounds.", "citations": [],
                   "rounds": specification["max_rounds"], "evaluations": state["evaluations"],
                   "last_refusal_reason": state.get("last_refusal_reason", "no_candidates"),
                   "evidence_contract_version": CONTRACT_VERSION}
         state.update(finished=True, result=result)
-        self.save(job, state, "runtime_finished", {"outcome": "insufficient_evidence", **safe_metadata(result, profiles)})
+        await self.save(job, state, "runtime_finished", {"outcome": "insufficient_evidence", **safe_metadata(result, profiles)})
         return result

@@ -234,3 +234,4 @@ __marimo__/
 .coverage.*
 htmlcov/
 reports/testing/
+reports/testing-*/

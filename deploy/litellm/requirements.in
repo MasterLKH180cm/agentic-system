@@ -1,0 +1,2 @@
+# Isolated gateway verification runtime, never added to application dependencies.
+litellm[proxy,extra_proxy]==1.110.2

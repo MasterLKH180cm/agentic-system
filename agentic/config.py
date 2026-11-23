@@ -7,6 +7,8 @@ import math
 import os
 from pathlib import Path
 import re
+import ssl
+import stat
 from urllib.parse import urlparse
 
 from agentic.features import Features
@@ -15,6 +17,28 @@ INKLING_MODEL = "thinkingmachines/Inkling-2-Mini"
 INKLING_BASE_URL = "https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1"
 INKLING_LOCAL_BASE_URL = "http://127.0.0.1:8080/v1"
 REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh", "max"}
+MODEL_PROVIDERS = frozenset({"offline", "openai", "anthropic", "inkling", "routed"})
+
+
+def model_ssl_context(ca_file: str | None = None) -> ssl.SSLContext:
+    """Load an explicitly selected bounded regular PEM bundle with verification."""
+    if ca_file is None:
+        return ssl.create_default_context()
+    if not isinstance(ca_file, str) or not ca_file or len(ca_file) > 4096:
+        raise ValueError("Invalid model route CA file")
+    try:
+        # O_NONBLOCK avoids hanging on a FIFO before fstat can reject it.
+        with os.fdopen(os.open(ca_file, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW), "rb") as handle:
+            info = os.fstat(handle.fileno())
+            if not stat.S_ISREG(info.st_mode) or not 1 <= info.st_size <= 1_048_576:
+                raise ValueError("Model route CA file must be a bounded regular PEM file")
+            pem = handle.read(1_048_577)
+        if len(pem) > 1_048_576:
+            raise ValueError("Model route CA file exceeds size limit")
+        context = ssl.create_default_context(cadata=pem.decode("ascii"))
+    except (OSError, UnicodeError, ssl.SSLError) as exc:
+        raise ValueError("Model route CA file must contain valid PEM certificates") from exc
+    return context
 
 
 def validate_reasoning_effort(value: object) -> None:
@@ -74,6 +98,7 @@ class ModelRoute:
     reasoning_effort: str | float | None = None
     auth_mode: str = "required"
     output_token_parameter: str | None = None
+    ca_file: str | None = None
 
     def __post_init__(self):
         validate_reasoning_effort(self.reasoning_effort)
@@ -86,6 +111,10 @@ class ModelRoute:
         if self.auth_mode == "none" and (self.provider != "openai" or self.api_key):
             raise ValueError("Unauthenticated routes require OpenAI-compatible transport and no API key")
         validate_model_endpoint(self.base_url, unauthenticated=self.auth_mode == "none")
+        if self.ca_file is not None:
+            if urlparse(self.base_url).scheme != "https":
+                raise ValueError("Model route CA file requires HTTPS")
+            model_ssl_context(self.ca_file)
         if self.output_token_parameter is not None and (
             self.provider != "openai" or self.output_token_parameter not in ("max_tokens", "max_completion_tokens")
         ):
@@ -113,7 +142,7 @@ def model_routes(
         if not isinstance(entry, dict) or set(entry) - {
             "name", "provider", "model", "base_url", "api_key_env", "purposes",
             "input_cost_per_million", "output_cost_per_million", "preset", "reasoning_effort",
-            "auth_mode", "output_token_parameter",
+            "auth_mode", "output_token_parameter", "ca_file",
         }:
             raise ValueError("Invalid model route fields")
         preset = entry.get("preset")
@@ -161,7 +190,7 @@ def model_routes(
         # Validate transport and auth before reading any credential. In particular,
         # local no-auth routes must never load ambient hosted-provider secrets.
         route = ModelRoute(name, kind, model, base, "", tuple(purposes), *prices, effort,
-                           auth_mode, token_parameter)
+                           auth_mode, token_parameter, entry.get("ca_file"))
         key = ""
         if require_credentials and auth_mode == "required":
             if key_env:
@@ -208,6 +237,8 @@ class Settings:
     features: Features = field(default_factory=Features)
 
     def __post_init__(self):
+        if not isinstance(self.provider, str) or self.provider not in MODEL_PROVIDERS:
+            raise ValueError("Unsupported model provider")
         if not isinstance(self.features, Features):
             raise ValueError("Settings features must be validated operator permissions")
         if (type(self.rag_timeout_seconds) not in (int, float)
@@ -257,7 +288,7 @@ class Settings:
         if env == "production" and any(len(key) < 24 for key in keys):
             raise ValueError("Use strong production API keys")
         provider = os.getenv("AGENT_MODEL_PROVIDER", "offline").lower()
-        if provider not in {"offline", "openai", "anthropic", "inkling"}:
+        if provider not in MODEL_PROVIDERS - {"routed"}:
             raise ValueError("Unsupported model provider")
         concurrency = int(os.getenv("AGENT_MAX_PARALLEL", "4"))
         if not 1 <= concurrency <= 16:

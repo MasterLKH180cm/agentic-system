@@ -5,7 +5,8 @@ import math
 
 import httpx
 
-from agentic.config import ModelRoute, Settings
+from agentic.config import ModelRoute, Settings, model_ssl_context
+from agentic.async_io import OffloadBusy, run_sync, submit_sync
 from agentic.store import Store
 from agentic.telemetry import span
 
@@ -112,37 +113,67 @@ class ModelGateway:
             return None
         clock = asyncio.get_running_loop().time
         deadline = clock() + self.config.model_timeout_seconds
-        snapshot = self._snapshot(tenant, run_id)
-        self.config.features.require("model_generation", snapshot)
         if len(system) + len(message) > 100000:
             raise ValueError("Model input exceeds size limit")
         # UTF-8 bytes plus message overhead intentionally over-reserves compared
         # with typical text tokenizers. Reported usage replaces it when available.
         estimated_input = self.input_units(system, message)
         output_limit = self.config.max_model_output_tokens
-        routes = self.routes(purpose, snapshot)
         # One elapsed budget covers all routes, connection, headers and body.
         # HTTPX's per-read inactivity timeout alone allows endless dribbling.
         async with asyncio.timeout_at(deadline), AsyncExitStack() as clients:
+            snapshot = await run_sync(self._snapshot, tenant, run_id)
+            self.config.features.require("model_generation", snapshot)
+            routes = self.routes(purpose, snapshot)
             transports = {}
             for index, route in enumerate(routes):
                 if route.auth_mode == "required" and not route.api_key:
                     raise ValueError("Configured model route requires an API key")
                 # Local no-auth traffic must never pass through environment
                 # proxies. Hosted routes retain their existing proxy behavior.
-                trust_environment = route.auth_mode != "none"
-                if trust_environment not in transports:
-                    transports[trust_environment] = await clients.enter_async_context(httpx.AsyncClient(
-                        timeout=None, follow_redirects=False, trust_env=trust_environment,
+                trust_environment = route.auth_mode != "none" and route.ca_file is None
+                transport_key = (trust_environment, route.ca_file)
+                if transport_key not in transports:
+                    options = {} if route.ca_file is None else {
+                        "verify": await run_sync(model_ssl_context, route.ca_file),
+                    }
+                    transports[transport_key] = await clients.enter_async_context(httpx.AsyncClient(
+                        timeout=None, follow_redirects=False, trust_env=trust_environment, **options,
                     ))
-                client = transports[trust_environment]
+                client = transports[transport_key]
                 if clock() >= deadline:
                     raise TimeoutError("Model call deadline elapsed")
-                reservation = self.store.reserve_usage(
+                reservation = await run_sync(self.store.reserve_usage,
                     tenant, run_id, route.name, purpose, estimated_input + output_limit,
                     estimated_cost(route, estimated_input, output_limit),
                     default_limit=self.config.max_model_tokens,
                 )
+                settlement_started = False
+
+                def begin_settlement(_reservation=reservation, **kwargs):
+                    nonlocal settlement_started
+                    if settlement_started:
+                        return
+                    # Cancellation may leave this operation running. Do not
+                    # race it with a second, less precise settlement.
+                    future = submit_sync(self.store.settle_usage, _reservation, **kwargs)
+                    settlement_started = True
+                    return future
+
+                async def settle(_begin=begin_settlement, **kwargs):
+                    future = _begin(**kwargs)
+                    if future is not None:
+                        await asyncio.shield(future)
+
+                def record_stop(_begin=begin_settlement, **kwargs):
+                    try:
+                        _begin(**kwargs)
+                    except OffloadBusy:
+                        # Retain the conservative durable reservation if all
+                        # finalization capacity is already occupied. An expired
+                        # caller must not wait for a contended database lock.
+                        pass
+
                 try:
                     if clock() >= deadline:
                         raise TimeoutError("Model call deadline elapsed")
@@ -154,12 +185,12 @@ class ModelGateway:
                     data = response.json()
                     counts = reported_usage(route.provider, data.get("usage"))
                     if counts is not None:
-                        self.store.settle_usage(
-                            reservation, input_tokens=counts[0], output_tokens=counts[1],
+                        await settle(
+                            input_tokens=counts[0], output_tokens=counts[1],
                             cost_microusd=estimated_cost(route, *counts), status="reported",
                         )
                     else:
-                        self.store.settle_usage(reservation, status="estimated_missing_usage")
+                        await settle(status="estimated_missing_usage")
                     if route.provider == "openai":
                         choice = data["choices"][0]
                         if choice.get("finish_reason") == "length":
@@ -183,23 +214,23 @@ class ModelGateway:
                         raise TimeoutError("Model call deadline elapsed")
                     return text
                 except asyncio.CancelledError:
-                    self.store.settle_usage(reservation, status=(
+                    record_stop(status=(
                         "uncertain_timeout" if clock() >= deadline else "uncertain_cancelled"
                     ))
                     raise
                 except TimeoutError:
-                    self.store.settle_usage(reservation, status="uncertain_timeout")
+                    record_stop(status="uncertain_timeout")
                     raise
                 except httpx.HTTPStatusError as exc:
-                    self.store.settle_usage(reservation, status="uncertain_http_error")
+                    await settle(status="uncertain_http_error")
                     transient = exc.response.status_code == 429 or 500 <= exc.response.status_code < 600
                     if not transient or index == len(routes) - 1:
                         raise
                 except httpx.TransportError:
-                    self.store.settle_usage(reservation, status="uncertain_transport_error")
+                    await settle(status="uncertain_transport_error")
                     if index == len(routes) - 1:
                         raise
                 except Exception:
-                    self.store.settle_usage(reservation, status="uncertain_response_error")
+                    await settle(status="uncertain_response_error")
                     raise
         raise ValueError("No model route completed")

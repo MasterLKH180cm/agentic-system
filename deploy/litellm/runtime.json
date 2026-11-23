@@ -1,0 +1,11 @@
+{
+  "version": "1.110.2",
+  "image": "ghcr.io/berriai/litellm:v1.110.2@sha256:ef798594ca3db8d81bad2e1439f536f49b71fe095ee9f20416f5e149b4e22035",
+  "release_url": "https://github.com/BerriAI/litellm/releases/tag/v1.110.2",
+  "release_notes": "https://docs.litellm.ai/release_notes/v1.110.2/v1-110-2",
+  "image_security": "https://docs.litellm.ai/docs/proxy/docker_image_security",
+  "verified_registry_date": "2026-11-23",
+  "python_package": "litellm[proxy,extra_proxy]==1.110.2",
+  "linux_amd64_wheel_sha256": "9d94d1c7d524b6fd10c14f9c8c6c4f0ac31705f9964ac59dcfd8337c046d8917",
+  "evidence": "Registry and PyPI identities; runtime acceptance is recorded separately."
+}

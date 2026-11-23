@@ -1,0 +1,37 @@
+# One immutable generation deployment. Embeddings keep their own index identity.
+model_list:
+  - model_name: gateway/inkling-2-mini-iq4nl-v1
+    litellm_params:
+      model: openai/thinkingmachines/Inkling-2-Mini
+      api_base: os.environ/INKLING_UPSTREAM_API_BASE
+      api_key: os.environ/INKLING_UPSTREAM_API_KEY
+      max_retries: 0
+      timeout: 85
+    model_info:
+      mode: chat
+      # This is the requested deployment contract. Real Inkling parser/quality
+      # acceptance must be measured separately; fixture tests do not certify it.
+      supports_function_calling: true
+      # Operator deployment label, not attestation of the loaded checkpoint.
+      id: inkling-2-mini-iq4nl-v1
+router_settings:
+  num_retries: 0
+  max_fallbacks: 0
+  fallbacks: []
+  timeout: 85
+  cache_responses: false
+litellm_settings:
+  num_retries: 0
+  drop_params: false
+  modify_params: false
+  cache: false
+  set_verbose: false
+  telemetry: false
+  turn_off_message_logging: true
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  store_prompts_in_spend_logs: false
+  disable_error_logs: true
+  disable_spend_logs: false
+  background_health_checks: false

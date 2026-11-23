@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import ValidationError
 
 from agentic.schemas import WorkflowIn
+from agentic.async_io import run_sync
 
 
 def dashboard_html(config):
@@ -80,11 +81,11 @@ def install_interfaces(app, store, submit_callback, authenticator, config=None):
                     or len(last_event_id) > 19 or int(last_event_id) > 2**63 - 1):
                 raise HTTPException(400, "Invalid event cursor")
             after = max(after, int(last_event_id))
-        run = await asyncio.to_thread(store.get, tenant, run_id)
+        run = await run_sync(store.get, tenant, run_id)
         if run is None:
             raise HTTPException(404, "Workflow not found")
         resource = {"tenant": tenant, "namespace": run["specification"]["memory_namespace"]}
-        principal = authenticator.authenticate(request.headers.get("authorization"))
+        principal = await run_sync(authenticator.authenticate, request.headers.get("authorization"))
         authenticator.require(principal, "workflow:read", resource)
 
         async def events():
@@ -92,16 +93,16 @@ def install_interfaces(app, store, submit_callback, authenticator, config=None):
             deadline = time.monotonic() + 60
             while time.monotonic() < deadline and not await request.is_disconnected():
                 try:
-                    principal = authenticator.authenticate(request.headers.get("authorization"))
+                    principal = await run_sync(authenticator.authenticate, request.headers.get("authorization"))
                     authenticator.require(principal, "workflow:read", resource)
                 except HTTPException:
                     yield "event: auth_expired\ndata: {}\n\n"
                     return
-                pending = await asyncio.to_thread(store.events, tenant, run_id, cursor, 201)
+                pending = await run_sync(store.events, tenant, run_id, cursor, 201)
                 for event in pending[:200]:
                     cursor = event["id"]
                     yield f"id: {cursor}\nevent: workflow\ndata: {json.dumps(event)}\n\n"
-                state = await asyncio.to_thread(store.get, tenant, run_id)
+                state = await run_sync(store.get, tenant, run_id)
                 if state is None:
                     return
                 if len(pending) <= 200 and state["status"] in {"completed", "failed", "cancelled"}:
@@ -136,13 +137,17 @@ def install_interfaces(app, store, submit_callback, authenticator, config=None):
                           hashlib.sha256).hexdigest()
         if not hmac.compare_digest(signature, "sha256=" + digest):
             raise HTTPException(401, "Invalid webhook signature")
-        if not authenticator.limiter.take("hook:" + identity):
+        if not await run_sync(authenticator.limiter.take, "hook:" + identity):
             raise HTTPException(429, "Webhook rate exceeded")
-        with store.connect() as db:
-            db.execute("DELETE FROM hook_receipts WHERE expires_at<?", (time.time(),))
-            if db.execute("SELECT digest FROM hook_receipts WHERE hook_id=? AND digest=?",
-                          (identity, digest)).fetchone():
-                raise HTTPException(409, "Webhook already received")
+
+        def check_receipt():
+            with store.connect() as db:
+                db.execute("DELETE FROM hook_receipts WHERE expires_at<?", (time.time(),))
+                if db.execute("SELECT digest FROM hook_receipts WHERE hook_id=? AND digest=?",
+                              (identity, digest)).fetchone():
+                    raise HTTPException(409, "Webhook already received")
+
+        await run_sync(check_receipt)
         try:
             payload = WorkflowIn.model_validate_json(bytes(body))
         except ValidationError as exc:
@@ -153,10 +158,14 @@ def install_interfaces(app, store, submit_callback, authenticator, config=None):
         delivery = hashlib.sha256((identity + ":" + logical_key).encode()).hexdigest()
         payload = payload.model_copy(update={"idempotency_key": "hook:" + delivery})
         result = await submit_callback(payload, hook["tenant"])
-        with store.connect() as db:
-            accepted = db.execute("INSERT INTO hook_receipts(hook_id,digest,expires_at) VALUES(?,?,?) "
+
+        def record_receipt():
+            with store.connect() as db:
+                return db.execute("INSERT INTO hook_receipts(hook_id,digest,expires_at) VALUES(?,?,?) "
                                   "ON CONFLICT(hook_id,digest) DO NOTHING",
                                   (identity, digest, time.time() + 600)).rowcount
+
+        accepted = await run_sync(record_receipt)
         if not accepted:
             raise HTTPException(409, "Webhook already received")
         return result
