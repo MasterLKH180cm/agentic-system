@@ -1,12 +1,15 @@
-"""PostgreSQL adapter for the runtime's deliberately small SQL vocabulary.
+"""PostgreSQL vocabulary adapter with pooled, explicitly scoped transactions.
 
-Transactions use a database-local advisory lock to preserve the existing
-serialized queue semantics across hosts. Tool execution happens outside it.
-This is a correctness-first backend, not a high-throughput SKIP LOCKED queue.
+Control-plane writes retain an exclusive advisory lock. Workflow transitions
+share its compatibility lock and lock individual run rows; claims skip locked
+runs. Read-only transactions use a
+repeatable snapshot and do not acquire either write lock.
 """
 import re
 import sqlite3
 from contextlib import contextmanager
+
+from agentic.pgpool import raw_connection
 
 ACCOUNTING_COLUMNS = ("input_tokens", "output_tokens", "charged_tokens", "cost_microusd")
 
@@ -83,11 +86,18 @@ def bind_parameters(sql: str) -> str:
 
 
 class Connection:
-    def __init__(self, raw):
+    def __init__(self, raw, *, read_only: bool = False, serialized: bool = True):
         self.raw = raw
+        if read_only:
+            raw.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         raw.execute("SET LOCAL statement_timeout = '20s'")
         raw.execute("SET LOCAL lock_timeout = '20s'")
-        raw.execute("SELECT pg_advisory_xact_lock(731824102)")
+        if not read_only:
+            # Legacy writers hold the exclusive form of the same key. New run
+            # writers share this bridge, so they remain concurrent while never
+            # racing a pre-upgrade writer or a schema/admission transaction.
+            raw.execute("SELECT pg_advisory_xact_lock(731824102)" if serialized else
+                        "SELECT pg_advisory_xact_lock_shared(731824102)")
 
     def execute(self, statement: str, parameters=()):
         sql = statement.strip()
@@ -121,18 +131,6 @@ class Connection:
 
 
 @contextmanager
-def connect(dsn: str):
-    try:
-        import psycopg
-        from psycopg.rows import dict_row
-    except ImportError as exc:
-        raise ValueError("Install the postgres extra for AGENT_DATABASE_URL") from exc
-    raw = psycopg.connect(dsn, row_factory=dict_row, connect_timeout=5)
-    try:
-        yield Connection(raw)
-        raw.commit()
-    except BaseException:
-        raw.rollback()
-        raise
-    finally:
-        raw.close()
+def connect(dsn: str, *, read_only: bool = False, serialized: bool = True):
+    with raw_connection(dsn) as raw:
+        yield Connection(raw, read_only=read_only, serialized=serialized)

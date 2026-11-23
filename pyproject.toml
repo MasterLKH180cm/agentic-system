@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentic-system-platform"
-version = "0.4.0"
+version = "0.5.0"
 description = "Durable workflow engine and bounded agent tools for RAGs"
 requires-python = ">=3.11"
 dependencies = [
@@ -17,7 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.19,<2"]
-postgres = ["psycopg[binary]>=3.2,<4"]
+postgres = ["psycopg[binary,pool]>=3.2,<4", "psycopg-pool>=3.2,<4"]
 storage = ["boto3>=1.35,<2", "redis>=5,<7"]
 telemetry = ["opentelemetry-api>=1.28,<2", "opentelemetry-sdk>=1.28,<2", "opentelemetry-exporter-otlp-proto-http>=1.28,<2"]
 dev = ["pytest-cov>=7.1,<8", "pytest>=8,<10", "ruff>=0.8,<1", "pytest-asyncio>=0.23,<2"]

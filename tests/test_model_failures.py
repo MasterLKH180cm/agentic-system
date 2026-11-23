@@ -2,6 +2,7 @@
 import asyncio
 import gzip
 import json
+import time
 from dataclasses import replace
 
 import httpx
@@ -61,8 +62,17 @@ async def provider(tmp_path):
             }
             status = reply.get("status", 200)
             encoded_headers = "".join(f"{name}: {value}\r\n" for name, value in response_headers.items())
-            writer.write(f"HTTP/1.1 {status} Fixture\r\n{encoded_headers}\r\n".encode() + body)
-            await writer.drain()
+            if reply.get("header_delay"):
+                await asyncio.sleep(reply["header_delay"])
+            writer.write(f"HTTP/1.1 {status} Fixture\r\n{encoded_headers}\r\n".encode())
+            if reply.get("dribble_seconds"):
+                for offset in range(len(body)):
+                    writer.write(body[offset:offset + 1])
+                    await writer.drain()
+                    await asyncio.sleep(reply["dribble_seconds"])
+            else:
+                writer.write(body)
+                await writer.drain()
         except (asyncio.IncompleteReadError, ConnectionResetError, BrokenPipeError):
             pass  # A cancelled client is allowed to close before the fixture replies.
         except Exception as exc:
@@ -108,6 +118,73 @@ async def complete(model, run_id):
     return await model.complete("System", "Question", tenant="tenant-a", run_id=run_id)
 
 
+async def test_inkling_transport_preserves_budget_effort_and_separate_reasoning(provider):
+    model, store, run_id, state = provider
+    route = replace(model.config.routes[0], model="thinkingmachines/Inkling-2-Mini", reasoning_effort=0.2)
+    model.config = replace(model.config, routes=(route,))
+    body = json.loads(state["replies"]["primary"]["body"])
+    body["choices"][0]["message"]["reasoning_content"] = "Private reasoning is never used as answer text."
+    body["choices"][0]["finish_reason"] = "stop"
+    body["usage"]["prompt_tokens_details"] = {"cached_tokens": 5}
+    state["replies"]["primary"]["body"] = json.dumps(body).encode()
+    assert await complete(model, run_id) == "Fixture answer"
+    payload = state["calls"][0]["payload"]
+    assert payload["model"] == route.model and payload["reasoning_effort"] == 0.2
+    assert payload["max_completion_tokens"] == 32
+    assert "response_format" not in payload and "max_tokens" not in payload
+    assert store.usage("tenant-a", run_id)["charged_tokens"] == 10
+
+
+@pytest.mark.parametrize("kind", ["openai", "anthropic"])
+async def test_truncated_output_is_rejected_even_when_content_is_valid_json(provider, kind):
+    model, store, run_id, state = provider
+    route = next(route for route in model.config.routes if route.provider == kind)
+    model.config = replace(model.config, routes=(route,))
+    body = json.loads(response_body(kind, text='{"steps": []}'))
+    if kind == "openai":
+        body["choices"][0]["finish_reason"] = "length"
+    else:
+        body["stop_reason"] = "max_tokens"
+    state["replies"][route.name]["body"] = json.dumps(body).encode()
+    with pytest.raises(ValueError, match="truncated"):
+        await complete(model, run_id)
+    call, = store.usage("tenant-a", run_id)["calls"]
+    assert call["status"] == "reported" and call["charged_tokens"] == 10
+    assert len(state["calls"]) == 1
+
+
+async def test_reasoning_only_response_is_not_treated_as_an_answer(provider):
+    model, store, run_id, state = provider
+    body = json.loads(response_body(text=None))
+    body["choices"][0]["message"]["reasoning_content"] = "reasoning only"
+    state["replies"]["primary"]["body"] = json.dumps(body).encode()
+    with pytest.raises(ValueError, match="no text"):
+        await complete(model, run_id)
+    assert store.usage("tenant-a", run_id)["calls"][0]["status"] == "reported"
+
+
+@pytest.mark.parametrize(("kind", "reason"), [
+    ("openai", "content_filter"), ("openai", "tool_calls"), ("openai", "function_call"),
+    ("openai", "unknown"), ("openai", None), ("anthropic", "tool_use"),
+    ("anthropic", "refusal"), ("anthropic", "pause_turn"), ("anthropic", None),
+])
+async def test_nontext_terminal_reasons_cannot_turn_valid_looking_text_into_success(provider, kind, reason):
+    model, store, run_id, state = provider
+    route = next(route for route in model.config.routes if route.provider == kind)
+    model.config = replace(model.config, routes=(route,))
+    body = json.loads(response_body(kind, text='{"steps": []}'))
+    if kind == "openai":
+        body["choices"][0]["finish_reason"] = reason
+    else:
+        body["stop_reason"] = reason
+    state["replies"][route.name]["body"] = json.dumps(body).encode()
+    with pytest.raises(ValueError, match="finish a text response"):
+        await complete(model, run_id)
+    call, = store.usage("tenant-a", run_id)["calls"]
+    assert call["status"] == "reported" and call["charged_tokens"] == 10
+    assert len(state["calls"]) == 1
+
+
 @pytest.mark.parametrize("fault", ["invalid-json", "compressed", "oversized"])
 async def test_protocol_errors_do_not_fallback_or_erase_reserved_charges(provider, fault):
     model, store, run_id, state = provider
@@ -151,6 +228,54 @@ async def test_http_cancellation_retains_uncertain_reservation_without_fallback(
     assert not usage["usage_complete"]
     settled = [event for event in store.events("tenant-a", run_id) if event["type"] == "model_usage"]
     assert len(settled) == 1 and settled[0]["payload"]["status"] == "uncertain_cancelled"
+
+
+@pytest.mark.parametrize("fault", ["stalled-headers", "slow-dribble"])
+async def test_total_model_deadline_stops_headers_and_dribbling_without_fallback(provider, fault):
+    model, store, run_id, state = provider
+    model.config = replace(model.config, model_timeout_seconds=0.25)
+    if fault == "stalled-headers":
+        state["hold"] = True
+    else:
+        state["replies"]["primary"]["dribble_seconds"] = 0.02
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(complete(model, run_id), timeout=2)
+    assert len(state["calls"]) == 1
+    record, = store.usage("tenant-a", run_id)["calls"]
+    assert record["status"] == "uncertain_timeout"
+    assert record["charged_tokens"] == ModelGateway.input_units("System", "Question") + 32
+    assert record["cost_microusd"] > 0
+
+
+async def test_fallback_attempts_share_one_elapsed_model_deadline(provider):
+    model, store, run_id, state = provider
+    model.config = replace(model.config, model_timeout_seconds=0.4)
+    state["replies"]["primary"].update(status=503, header_delay=0.25)
+    state["replies"]["secondary"]["dribble_seconds"] = 0.02
+    started = time.monotonic()
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(complete(model, run_id), timeout=2)
+    assert time.monotonic() - started < 0.6
+    assert len(state["calls"]) == 2
+    calls = store.usage("tenant-a", run_id)["calls"]
+    assert [call["status"] for call in calls] == ["uncertain_http_error", "uncertain_timeout"]
+
+
+async def test_blocking_settlement_cannot_return_late_success_or_erase_reported_usage(provider, monkeypatch):
+    model, store, run_id, _ = provider
+    model.config = replace(model.config, model_timeout_seconds=0.25)
+    settle = store.settle_usage
+
+    def delayed_settlement(reservation, **kwargs):
+        if kwargs.get("status") == "reported":
+            time.sleep(0.3)
+        return settle(reservation, **kwargs)
+
+    monkeypatch.setattr(store, "settle_usage", delayed_settlement)
+    with pytest.raises(TimeoutError):
+        await complete(model, run_id)
+    record, = store.usage("tenant-a", run_id)["calls"]
+    assert record["status"] == "reported" and record["charged_tokens"] == 10
 
 
 @pytest.mark.parametrize("kind", ["openai", "anthropic"])

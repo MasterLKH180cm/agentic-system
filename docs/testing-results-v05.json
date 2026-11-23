@@ -1,0 +1,203 @@
+{
+  "schema_version": "agentic-validation-v05",
+  "recorded_at_utc": "2026-11-23T02:44:09.024993+00:00",
+  "scope": "Core unit/integration, actual PostgreSQL and Redis, independent RAG/API/worker/MCP and recovery processes, and synthetic direct Store benchmark. Browser/S3 remain explicit remote CI gates; no live-model measurement is claimed.",
+  "core": {
+    "status": "passed",
+    "passed": 500,
+    "unit": 230,
+    "integration": 270,
+    "external_deselected": 16,
+    "skipped": 0,
+    "junit": "reports/testing/junit-core.xml"
+  },
+  "postgres": {
+    "status": "passed",
+    "passed": 14,
+    "skipped": 0,
+    "junit": "reports/testing/junit-postgres-v05.xml"
+  },
+  "coverage": {
+    "scope": "ordinary core unit+integration; complete 23-module Python production package",
+    "line_percent": 90.05489183080401,
+    "branch_percent": 82.92880258899676,
+    "line_floor": 85,
+    "branch_floor": 75,
+    "passed": true,
+    "suppression_added": false
+  },
+  "checks": {
+    "ruff_syntax_imports": "passed",
+    "ruff_bug_bear_precedence": "passed",
+    "git_diff_check": "passed",
+    "uv_lock_check": "passed"
+  },
+  "benchmark": {
+    "status": "passed",
+    "report": "reports/postgres-comparison-v05.json",
+    "model_calls": 0,
+    "measured_validated_samples": 2880,
+    "baseline_commit": "830a27123f3d64266f15ae96706ffd249f3cf5d9",
+    "current_source_sha256": "f39cdf7ffb4e04f2f776550f43e5951e37669c091ad4310836ddcfbc06c6aae6",
+    "harness_sha256": "1b322e7563527964fcb3b71e1902a44c137d36a1121f3f9c9c7387254b9c67c3"
+  },
+  "live_inkling": {
+    "status": "blocked",
+    "reason": "No authorized live endpoint credential available to this execution environment. No model-quality, latency, token-throughput or cost measurement claimed."
+  },
+  "process_acceptance": {
+    "local-resilience-sqlite-final": {
+      "status": "passed",
+      "checks": [
+        {
+          "id": "worker_crash_recovery",
+          "passed": true,
+          "read_attempts": 2,
+          "committed_dependency_attempts": 1,
+          "deadline_preserved": true,
+          "http_and_mcp_agree": true
+        },
+        {
+          "id": "cancel_late_result_fencing",
+          "passed": true,
+          "dependent_publication_attempts": 0,
+          "late_result_committed": false,
+          "http_and_mcp_agree": true
+        },
+        {
+          "id": "sse_cursor_reconnect",
+          "passed": true,
+          "cursor": 10,
+          "resumed_events": 2,
+          "duplicates": 0,
+          "persisted_events_match": true
+        },
+        {
+          "id": "transient_http_retry",
+          "passed": true,
+          "http_attempts": 2,
+          "actual_rag_requests": 1
+        },
+        {
+          "id": "retry_exhaustion",
+          "passed": true,
+          "http_attempts": 2,
+          "dependent_publication_attempts": 0
+        },
+        {
+          "id": "persisted_step_deadline",
+          "passed": true,
+          "attempts": 1,
+          "dependent_publication_attempts": 0
+        }
+      ],
+      "cleanup_completed": true
+    },
+    "local-resilience-postgres-final": {
+      "status": "passed",
+      "checks": [
+        {
+          "id": "worker_crash_recovery",
+          "passed": true,
+          "read_attempts": 2,
+          "committed_dependency_attempts": 1,
+          "deadline_preserved": true,
+          "http_and_mcp_agree": true
+        },
+        {
+          "id": "cancel_late_result_fencing",
+          "passed": true,
+          "dependent_publication_attempts": 0,
+          "late_result_committed": false,
+          "http_and_mcp_agree": true
+        },
+        {
+          "id": "sse_cursor_reconnect",
+          "passed": true,
+          "cursor": 10,
+          "resumed_events": 2,
+          "duplicates": 0,
+          "persisted_events_match": true
+        },
+        {
+          "id": "transient_http_retry",
+          "passed": true,
+          "http_attempts": 2,
+          "actual_rag_requests": 1
+        },
+        {
+          "id": "retry_exhaustion",
+          "passed": true,
+          "http_attempts": 2,
+          "dependent_publication_attempts": 0
+        },
+        {
+          "id": "persisted_step_deadline",
+          "passed": true,
+          "attempts": 1,
+          "dependent_publication_attempts": 0
+        }
+      ],
+      "cleanup_completed": true
+    },
+    "local-postgres-e2e-final": {
+      "status": "passed",
+      "checks": [
+        {
+          "id": "native_postgres_identity",
+          "passed": true,
+          "vector_extension": "0.8.7",
+          "native_type": "vector"
+        },
+        {
+          "id": "tenant_revision_and_filter_scope",
+          "passed": true,
+          "authorized_revisions": 2,
+          "foreign_citations": 0
+        },
+        {
+          "id": "rag_restart_persistence",
+          "passed": true,
+          "same_revision_and_citations": true
+        },
+        {
+          "id": "independent_worker_and_mcp",
+          "passed": true,
+          "terminal_state": "completed"
+        },
+        {
+          "id": "disabled_http_and_mcp",
+          "passed": true,
+          "mutation_rejected": true,
+          "query_rejected": true,
+          "shipped_mcp_listing_and_rejection": true
+        },
+        {
+          "id": "disabled_agent_submission",
+          "passed": true,
+          "no_new_workflow": true
+        },
+        {
+          "id": "historical_purge",
+          "passed": true,
+          "history_purged": true,
+          "other_tenant_preserved": true
+        }
+      ],
+      "cleanup_completed": true
+    }
+  },
+  "postgres_and_redis": {
+    "status": "passed",
+    "passed": 15,
+    "skipped": 0,
+    "junit": "reports/testing/local-postgres-redis-final.xml",
+    "postgres_cases": 14,
+    "redis_cases": 1
+  },
+  "local_environment_limits": {
+    "browser": "Chromium cannot create its required Unix sockets in this sandbox; actual browser job remains required in CI.",
+    "s3": "The actual MinIO binary cannot enumerate host addresses because netlink is prohibited; actual S3 CI remains required."
+  },
+  "tested_companion_rags_sha": "30a2e2bcec11120f92b8219d9ce5f71e2792c270"
+}

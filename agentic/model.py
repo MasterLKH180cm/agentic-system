@@ -84,6 +84,8 @@ class ModelGateway:
                 payload = {"model": route.model, "messages": [
                     {"role": "system", "content": system}, {"role": "user", "content": message},
                 ], "max_completion_tokens": output_limit}
+                if route.reasoning_effort is not None:
+                    payload["reasoning_effort"] = route.reasoning_effort
             else:
                 path = "/messages"
                 headers = {"x-api-key": route.api_key, "anthropic-version": "2023-06-01"}
@@ -107,6 +109,8 @@ class ModelGateway:
     ) -> str | None:
         if self.config.provider == "offline":
             return None
+        clock = asyncio.get_running_loop().time
+        deadline = clock() + self.config.model_timeout_seconds
         snapshot = self._snapshot(tenant, run_id)
         self.config.features.require("model_generation", snapshot)
         if len(system) + len(message) > 100000:
@@ -116,8 +120,12 @@ class ModelGateway:
         estimated_input = self.input_units(system, message)
         output_limit = self.config.max_model_output_tokens
         routes = self.routes(purpose, snapshot)
-        async with httpx.AsyncClient(timeout=90, follow_redirects=False) as client:
+        # One elapsed budget covers all routes, connection, headers and body.
+        # HTTPX's per-read inactivity timeout alone allows endless dribbling.
+        async with asyncio.timeout_at(deadline), httpx.AsyncClient(timeout=None, follow_redirects=False) as client:
             for index, route in enumerate(routes):
+                if clock() >= deadline:
+                    raise TimeoutError("Model call deadline elapsed")
                 if not route.api_key:
                     raise ValueError("Configured model route requires an API key")
                 reservation = self.store.reserve_usage(
@@ -126,6 +134,8 @@ class ModelGateway:
                     default_limit=self.config.max_model_tokens,
                 )
                 try:
+                    if clock() >= deadline:
+                        raise TimeoutError("Model call deadline elapsed")
                     response = await self._request(client, route, system, message, output_limit, run_id,
                                                    self.config.features.enabled("telemetry", snapshot))
                     response.raise_for_status()
@@ -141,8 +151,17 @@ class ModelGateway:
                     else:
                         self.store.settle_usage(reservation, status="estimated_missing_usage")
                     if route.provider == "openai":
-                        text = data["choices"][0]["message"]["content"]
+                        choice = data["choices"][0]
+                        if choice.get("finish_reason") == "length":
+                            raise ValueError("Model output was truncated by its token limit")
+                        if "finish_reason" in choice and choice["finish_reason"] != "stop":
+                            raise ValueError("Model did not finish a text response normally")
+                        text = choice["message"]["content"]
                     else:
+                        if data.get("stop_reason") == "max_tokens":
+                            raise ValueError("Model output was truncated by its token limit")
+                        if "stop_reason" in data and data["stop_reason"] not in {"end_turn", "stop_sequence"}:
+                            raise ValueError("Model did not finish a text response normally")
                         text = "".join(block["text"] for block in data["content"] if block.get("type") == "text")
                     if not isinstance(text, str) or not text.strip():
                         raise ValueError("Model returned no text")
@@ -150,9 +169,16 @@ class ModelGateway:
                         raise ValueError("Model text exceeds the response limit")
                     if counts is not None and counts[1] > output_limit:
                         raise ValueError("Model exceeded its configured output token limit")
+                    if clock() >= deadline:
+                        raise TimeoutError("Model call deadline elapsed")
                     return text
                 except asyncio.CancelledError:
-                    self.store.settle_usage(reservation, status="uncertain_cancelled")
+                    self.store.settle_usage(reservation, status=(
+                        "uncertain_timeout" if clock() >= deadline else "uncertain_cancelled"
+                    ))
+                    raise
+                except TimeoutError:
+                    self.store.settle_usage(reservation, status="uncertain_timeout")
                     raise
                 except httpx.HTTPStatusError as exc:
                     self.store.settle_usage(reservation, status="uncertain_http_error")
