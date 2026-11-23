@@ -410,7 +410,7 @@ Supply those keys before starting the services. Routes are operator-configured;
 requests cannot select their own provider URL. Fallback applies to transport
 failures, HTTP `429`, and `5xx`, not authentication or validation errors.
 
-### Inkling 2 Mini
+### Inkling 2 Mini: hosted Tinker
 
 Set `AGENT_MODEL_PROVIDER=inkling` in both API and worker environments and supply
 `TINKER_API_KEY` or `TINKER_API_KEY_FILE`. The preset resolves to:
@@ -424,7 +424,7 @@ Set `AGENT_MODEL_PROVIDER=inkling` in both API and worker environments and suppl
 | Output cap | `AGENT_MAX_MODEL_OUTPUT_TOKENS` via `max_completion_tokens` |
 | Total call timeout | `AGENT_MODEL_TIMEOUT_SECONDS`, default 90 seconds, including fallback attempts |
 
-For an operator-hosted compatible endpoint, or a different reasoning budget,
+For an authenticated compatible endpoint, or a different reasoning budget,
 use [`examples/inkling.routes.json`](examples/inkling.routes.json) as an
 `AGENT_MODEL_ROUTES_JSON` template and set `base_url`, `model`, and
 `reasoning_effort`. Accepted reasoning values are `none`, `minimal`, `low`,
@@ -439,6 +439,72 @@ Embeddings in the RAG service retain their own provider/model configuration.
 No model credential or paid call is enabled automatically by installing this
 upgrade. Monetary budgets require operator-configured prices; the preset does
 not freeze a time-sensitive price into application behavior.
+
+### Inkling 2 Mini: local inference
+
+Inkling 2 Mini also has [downloadable Apache-2.0 weights](https://thinkingmachines.ai/model-card/inkling-2-mini/).
+Run a compatible model server on your own hardware and select the separate
+`inkling-local` JSON route preset. The Agent API and worker remain lightweight
+HTTP clients; installing this package does not download weights or start an
+inference server. RAGs documents the [pinned self-hosted setup](https://github.com/MasterLKH180cm/RAGs/blob/master/docs/INKLING_LOCAL.md)
+and [model benchmark](https://github.com/MasterLKH180cm/RAGs/blob/master/docs/INKLING_BENCHMARK.md).
+
+| Local preset setting | Value |
+| --- | --- |
+| Model | `thinkingmachines/Inkling-2-Mini`; match the server's served alias |
+| Default endpoint | `http://127.0.0.1:8080/v1` |
+| Output cap | `AGENT_MAX_MODEL_OUTPUT_TOKENS` via `max_tokens` |
+| Reasoning effort | Unset; the server/model default applies |
+| Authentication | Required by default; explicitly select `auth_mode: none` for literal loopback |
+| Request deadline | Existing `AGENT_MODEL_TIMEOUT_SECONDS`; worker deadlines can stop earlier |
+
+For a model server and Agent processes running directly on the same host, the
+[unauthenticated local example](examples/inkling-local.routes.json) sends no
+Authorization header and bypasses ambient HTTP proxies:
+
+```bash
+export AGENT_MODEL_PROVIDER=openai
+export AGENT_MODEL_ROUTES_JSON="$(cat examples/inkling-local.routes.json)"
+```
+
+Apply the same route configuration to the API and every worker. `auth_mode: none`
+accepts only clean HTTP(S) endpoints with IPv4 loopback literals or `::1`.
+It rejects DNS names (including `localhost`), private/public network addresses,
+scoped/mapped IPv6 forms, URL credentials, and any `api_key_env` setting. It
+does not load ambient OpenAI, Anthropic or Tinker credentials. Use an explicit
+loopback IP instead of relying on DNS resolution.
+
+For an authenticated server, start from the
+[authenticated local example](examples/inkling-local-authenticated.routes.json).
+Set `base_url` to the actual service endpoint and supply its explicitly named
+`LOCAL_INKLING_API_KEY` or `LOCAL_INKLING_API_KEY_FILE`. Local authenticated
+presets require an explicit `api_key_env`; they never inherit hosted keys.
+Custom credential variables need an explicit mapping to both Compose clients,
+as described under [runtime environment](#complete-runtime-environment).
+
+Container loopback points to the container itself. A model server running on the
+host or in another container needs a reachable host/service URL with required
+authentication. The default Compose stack still contains its original four
+services and does not start an inference runtime.
+
+The route's optional `output_token_parameter` accepts only `max_tokens` or
+`max_completion_tokens` for OpenAI-compatible transport. Existing hosted routes
+retain `max_completion_tokens`. Configure reasoning effort only when the chosen
+server supports it; leaving the field unset does not disable model reasoning.
+The server must apply the model's chat template and separate reasoning from
+answer content. Agentic validates JSON plans and synthesis locally, and rejects
+native tool-call responses, reasoning-only output and token-limit truncation.
+Its tools remain the existing allowlisted workflow operations.
+
+When measuring local performance, record the checkpoint revision or GGUF file
+digest, quantization, server version, hardware, context limits and request
+controls. A served model alias is not proof of identical weights. Report startup
+and model loading separately from warmed inference. Earlier v0.5 reports about
+missing hosted credentials remain historical evidence; they do not prevent an
+explicit unauthenticated local deployment. Local integration fixtures establish
+protocol behavior and do not measure real Inkling speed or quality.
+The [local integration review](docs/SELF_HOSTED_INKLING_REVIEW.md) records the
+complete test, coverage and two-service process evidence for this change.
 
 Each gateway call reserves a conservative UTF-8-byte input estimate plus its
 output allowance before sending a request. Reported provider usage reconciles

@@ -1,0 +1,205 @@
+{
+  "schema_version": "agentic-local-inkling-validation-v1",
+  "recorded_at_utc": "2026-11-23T03:56:18.558654+00:00",
+  "scope": "Local authentication and transport contracts, complete core suite, PostgreSQL storage, and real two-service process acceptance. No real Inkling model was loaded or benchmarked.",
+  "source_snapshot": {
+    "agentic": {
+      "base_commit": "87d6a42f1463d5427fe10575864fcb57461c58ac",
+      "production_source_sha256": "a842e01ee166b367d951f18d5891b1ec4a5e130416ed90348bf1bed5dcfdcbd8"
+    },
+    "rags": {
+      "base_commit": "3620f77e6fbabd6fd59076a0ecac735dd8bcf9fa",
+      "production_source_sha256": "06aeb3178222f45d92d92c87881d1125f1ab72f74681fdbf13c3ee3896aec7bd"
+    }
+  },
+  "source_fingerprint_algorithm": "SHA256 of sorted package-relative Python filenames followed by their bytes; recursive within each production package",
+  "source_unchanged_during_process_gates": true,
+  "core": {
+    "status": "passed",
+    "passed": 545,
+    "unit": 269,
+    "integration": 276,
+    "external_deselected": 16,
+    "skipped": 0,
+    "junit": "reports/testing/junit-inkling-local.xml"
+  },
+  "postgres": {
+    "status": "passed",
+    "passed": 14,
+    "skipped": 0,
+    "junit": "reports/testing/junit-inkling-local-postgres.xml"
+  },
+  "coverage": {
+    "scope": "complete 23-module production Python package; core tests only",
+    "line_percent": 90.18424396442185,
+    "branch_percent": 83.17460317460318,
+    "line_floor": 85,
+    "branch_floor": 75,
+    "passed": true,
+    "suppression_added": false
+  },
+  "checks": {
+    "ruff_syntax_imports": "passed",
+    "ruff_bug_bear_precedence": "passed",
+    "git_diff_check": "passed",
+    "uv_lock_check": "passed"
+  },
+  "process_acceptance": {
+    "postgres_lifecycle": {
+      "status": "passed",
+      "schema_version": "pgvector-http-v04",
+      "expected_checks": [
+        "native_postgres_identity",
+        "tenant_revision_and_filter_scope",
+        "rag_restart_persistence",
+        "independent_worker_and_mcp",
+        "disabled_http_and_mcp",
+        "disabled_agent_submission",
+        "historical_purge"
+      ],
+      "checks": [
+        {
+          "id": "native_postgres_identity",
+          "passed": true,
+          "vector_extension": "0.8.7",
+          "native_type": "vector"
+        },
+        {
+          "id": "tenant_revision_and_filter_scope",
+          "passed": true,
+          "authorized_revisions": 2,
+          "foreign_citations": 0
+        },
+        {
+          "id": "rag_restart_persistence",
+          "passed": true,
+          "same_revision_and_citations": true
+        },
+        {
+          "id": "independent_worker_and_mcp",
+          "passed": true,
+          "terminal_state": "completed"
+        },
+        {
+          "id": "disabled_http_and_mcp",
+          "passed": true,
+          "mutation_rejected": true,
+          "query_rejected": true,
+          "shipped_mcp_listing_and_rejection": true
+        },
+        {
+          "id": "disabled_agent_submission",
+          "passed": true,
+          "no_new_workflow": true
+        },
+        {
+          "id": "historical_purge",
+          "passed": true,
+          "history_purged": true,
+          "other_tenant_preserved": true
+        }
+      ],
+      "live_paid_provider": false,
+      "database_state_modified_by_test": false,
+      "storage": {
+        "rag": {
+          "backend": "postgresql",
+          "vector_search": "pgvector_exact"
+        },
+        "agent": {
+          "backend": "postgresql",
+          "memory_search": "lexical"
+        }
+      },
+      "cleanup_completed": true,
+      "elapsed_seconds": 5.773,
+      "measured_at": "2026-11-23T03:53:42.298787+00:00"
+    },
+    "sqlite_resilience": {
+      "schema_version": "agent-resilience-e2e-v1",
+      "status": "passed",
+      "expected_checks": [
+        "worker_crash_recovery",
+        "cancel_late_result_fencing",
+        "sse_cursor_reconnect",
+        "transient_http_retry",
+        "retry_exhaustion",
+        "persisted_step_deadline"
+      ],
+      "checks": [
+        {
+          "id": "worker_crash_recovery",
+          "passed": true,
+          "read_attempts": 2,
+          "committed_dependency_attempts": 1,
+          "deadline_preserved": true,
+          "http_and_mcp_agree": true
+        },
+        {
+          "id": "cancel_late_result_fencing",
+          "passed": true,
+          "dependent_publication_attempts": 0,
+          "late_result_committed": false,
+          "http_and_mcp_agree": true
+        },
+        {
+          "id": "sse_cursor_reconnect",
+          "passed": true,
+          "cursor": 10,
+          "resumed_events": 2,
+          "duplicates": 0,
+          "persisted_events_match": true
+        },
+        {
+          "id": "transient_http_retry",
+          "passed": true,
+          "http_attempts": 2,
+          "actual_rag_requests": 1
+        },
+        {
+          "id": "retry_exhaustion",
+          "passed": true,
+          "http_attempts": 2,
+          "dependent_publication_attempts": 0
+        },
+        {
+          "id": "persisted_step_deadline",
+          "passed": true,
+          "attempts": 1,
+          "dependent_publication_attempts": 0
+        }
+      ],
+      "backend": "sqlite",
+      "real_services": [
+        "rag-http",
+        "agent-http",
+        "independent-worker",
+        "fixed-localhost-fault-proxy",
+        "stdio-mcp"
+      ],
+      "database_state_modified_by_test": false,
+      "live_paid_provider": false,
+      "storage": {
+        "rag": {
+          "backend": "sqlite",
+          "vector_search": "python_exact"
+        },
+        "agent": {
+          "backend": "sqlite",
+          "memory_search": "lexical"
+        }
+      },
+      "cleanup_completed": true,
+      "elapsed_seconds": 16.218,
+      "measured_at": "2026-11-23T03:53:51.688389+00:00"
+    }
+  },
+  "live_inkling": {
+    "status": "not_measured",
+    "evidence_kind": "local_http_contract_fixture",
+    "reason": "Contract fixtures and offline process checks do not execute downloaded model weights; use the pinned RAGs local guide and actual hardware/model evidence for performance."
+  },
+  "historical_evidence": "docs/testing-results-v05.json and reports/postgres-comparison-v05.json are preserved unchanged",
+  "final_ci_companion_revision": "ca243630dd24e19a541008965a572e13e85a2728",
+  "companion_after_local_process_gates": "RAG benchmark-only authenticated-local credential selection was refined after these recorded process gates; final exact-revision CI covers the pinned companion. The application serving path used by the process gates is unchanged."
+}
