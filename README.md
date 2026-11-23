@@ -10,7 +10,9 @@ execute typed tools; the companion [RAGs](https://github.com/MasterLKH180cm/RAGs
 service owns document ingestion and retrieval. The local stack works without
 paid model credentials.
 
-Version 0.4 adds operator feature controls and a PostgreSQL/pgvector deployment; see the [v0.4 specification](docs/SPEC_V04.md). Version 0.3 preserves evidence refusals across retrieval, synthesis, loops,
+Version 0.5 adds bounded PostgreSQL pooling, tenant/run locks, safe mixed-version
+`SKIP LOCKED` scheduling and an explicit Inkling 2 Mini profile; see the
+[v0.5 specification](docs/SPEC_V05.md). Version 0.4 adds operator feature controls and a PostgreSQL/pgvector deployment; see the [v0.4 specification](docs/SPEC_V04.md). Version 0.3 preserves evidence refusals across retrieval, synthesis, loops,
 durable results, SSE and MCP, and snapshots the required RAG admission policy.
 It builds on v0.2's immutable definitions, policy snapshots, memory, renewable
 leases, model budgets, a small web UI, authenticated event streams, and optional
@@ -52,7 +54,7 @@ external service or production topology has been verified.
 | **L7 · Model Gateway** | [Purpose routes, transient fallback, reservations, usage reconciliation, full JSON prompt/output caps](agentic/model.py) | Gateway budgets cover agent planning/synthesis; RAGs and other external costs are separate |
 | **L8 · Tool & Integration** | [Typed tool registry](agentic/tools.py), fixed RAG endpoint, [stdio MCP](agentic/mcp_server.py) | Adaptive loops use read-only tools; arbitrary-code sandbox is explicitly unavailable |
 | **L9 · Knowledge & Memory** | [Tenant/namespace memory](agentic/memory.py), CRUD, TTL and provenance; typed RAG decisions, refused-source quarantine and exact structured zero | Memory search is lexical; vector indexes and calibrated model quality belong to RAGs |
-| **L10 · Persistence** | Default PostgreSQL; explicit SQLite development; [PostgreSQL adapter](agentic/postgres.py); [local/S3 artifacts](agentic/storage_adapters.py); optional Redis limits | PostgreSQL serializes transactions with an advisory lock; actual service tests do not establish throughput or high availability |
+| **L10 · Persistence** | Default PostgreSQL; explicit SQLite development; [PostgreSQL adapter](agentic/postgres.py); [local/S3 artifacts](agentic/storage_adapters.py); optional Redis limits | PostgreSQL pools connections and serializes per run with a shared legacy-lock bridge; synthetic measurements do not establish production capacity or high availability |
 | **L11 · Governance** | Versioned tool/namespace/budget policies, disjoint approvers, provider-secret validation, redacted event metadata | Events are append-only application records, not a tamper-evident audit system |
 | **L12 · Observability & Quality** | [Optional OTLP traces/metrics](agentic/telemetry.py), usage records, durable refusal reasons and terminal REST/SSE/MCP inspection | Protocol tests and synthetic outcomes do not establish general answer quality or paid-provider quality |
 
@@ -390,7 +392,7 @@ not provided.
 
 ## Models and budgets
 
-`AGENT_MODEL_PROVIDER=offline` is the default. `openai` and `anthropic` enable
+`AGENT_MODEL_PROVIDER=offline` is the default. `openai`, `anthropic`, and `inkling` enable
 planning and synthesis. Provider keys use environment variables or matching
 `_FILE` variables; setting both forms is rejected.
 
@@ -407,6 +409,36 @@ export AGENT_MODEL_ROUTES_JSON='[
 Supply those keys before starting the services. Routes are operator-configured;
 requests cannot select their own provider URL. Fallback applies to transport
 failures, HTTP `429`, and `5xx`, not authentication or validation errors.
+
+### Inkling 2 Mini
+
+Set `AGENT_MODEL_PROVIDER=inkling` in both API and worker environments and supply
+`TINKER_API_KEY` or `TINKER_API_KEY_FILE`. The preset resolves to:
+
+| Setting | Value |
+| --- | --- |
+| Model | `thinkingmachines/Inkling-2-Mini` |
+| Base URL | `https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1` |
+| Transport | OpenAI-compatible chat completions |
+| Reasoning effort | `high` (explicit default) |
+| Output cap | `AGENT_MAX_MODEL_OUTPUT_TOKENS` via `max_completion_tokens` |
+| Total call timeout | `AGENT_MODEL_TIMEOUT_SECONDS`, default 90 seconds, including fallback attempts |
+
+For an operator-hosted compatible endpoint, or a different reasoning budget,
+use [`examples/inkling.routes.json`](examples/inkling.routes.json) as an
+`AGENT_MODEL_ROUTES_JSON` template and set `base_url`, `model`, and
+`reasoning_effort`. Accepted reasoning values are `none`, `minimal`, `low`,
+`medium`, `high`, `xhigh`, `max`, or a finite number from 0 to 0.99. Operators
+must verify that a third-party endpoint implements the selected controls.
+
+The [official Tinker chat reference](https://tinker-docs.thinkingmachines.ai/inference/openai/chat-completions/)
+says `response_format` is ignored. This service validates planner and synthesis
+JSON locally. Token-limit truncation is rejected and charged usage remains in
+the ledger. Separate reasoning text is not substituted for a final answer.
+Embeddings in the RAG service retain their own provider/model configuration.
+No model credential or paid call is enabled automatically by installing this
+upgrade. Monetary budgets require operator-configured prices; the preset does
+not freeze a time-sensitive price into application behavior.
 
 Each gateway call reserves a conservative UTF-8-byte input estimate plus its
 output allowance before sending a request. Reported provider usage reconciles
@@ -425,6 +457,44 @@ operator; monetary totals are estimates. Inspect `/usage?run_id=ID` or the run's
 model-assisted retrieval inside RAGs may still incur separate costs. There is
 no aggregate billing cap across both services. The current evaluator is
 deterministic and makes no model-evaluation call.
+
+## PostgreSQL concurrency and storage measurement
+
+The [v0.5 architecture](docs/ARCHITECTURE.md) uses a bounded process-local pool,
+read-only snapshots, and `FOR UPDATE SKIP LOCKED` workflow selection. Lease,
+completion, cancellation and accounting transitions take a shared compatibility
+lock, then lock their tenant-scoped workflow row before changing subordinate records. Independent workflows can proceed while
+one workflow is busy; no at-most-once external-side-effect guarantee is implied.
+
+| Setting | Default | Allowed values |
+| --- | --- | --- |
+| `AGENT_PG_POOL_SIZE` | `4` | `0..64`; zero disables pooling |
+| `AGENT_PG_POOL_TIMEOUT` | `5` | `0.1..60` seconds |
+| `AGENT_PG_POOL_MAX_WAITING` | `32` | `1..1024` |
+
+Each API/worker process has its own pool; size the total across replicas against
+the database connection limit. Use spawn/exec for workers so live pools are not
+inherited by fork. The shared advisory bridge coordinates with the exclusive
+lock used by v0.4, so mixed-version workers remain safe during rollout. Old
+writers still serialize new mutations while holding that lock; performance
+benefits increase after the worker fleet is upgraded. Persisted state stays
+compatible.
+
+To compare a baseline checkout with this revision on an authorized disposable
+PostgreSQL database:
+
+```bash
+# Set AGENT_TEST_POSTGRES_URL securely in the environment first.
+uv run --extra postgres python scripts/benchmark_postgres.py \
+  --baseline-root /path/to/agentic-baseline --samples 80 \
+  --concurrency 1 4 8 --repetitions 3
+```
+
+The harness creates and removes only its own schemas. It validates every result,
+records source fingerprints, alternates revision order, and reports median
+latency/throughput statistics across repetitions. These are synthetic direct
+Store measurements; they do not measure LLM speed, HTTP latency, or production
+capacity. See [the v0.5 acceptance spec](docs/SPEC_V05.md) for the invariants.
 
 ## Feature configuration
 
@@ -711,7 +781,7 @@ credentials are not forwarded to applications.
 | `AGENT_RAG_TIMEOUT_SECONDS` | `180` | Whole RAG HTTP exchange, finite 1..360 seconds. |
 | `AGENT_RAG_ADMISSION_POLICY` | `compatibility` | calibrated_required also needs a nonempty profile allowlist. |
 | `AGENT_RAG_ADMISSION_PROFILE_IDS_JSON` | `[]` | Allowed reviewed profile IDs, snapshotted with new runs. |
-| `AGENT_MODEL_PROVIDER` | `offline` | offline, openai, anthropic. No paid provider is enabled by default. |
+| `AGENT_MODEL_PROVIDER` | `offline` | offline, openai, anthropic, inkling. No paid provider is enabled by default. |
 | `AGENT_MODEL_ROUTES_JSON` | Unset | Optional 1..8 explicit routes with purposes and operator-supplied token prices. |
 | `AGENT_TENANT_POLICIES_JSON` | `{}` | Operator maxima for tools, namespaces, steps, rounds and budgets. |
 | `AGENT_MAX_PARALLEL` | `4` | Active steps per worker, 1..16. |
@@ -722,6 +792,7 @@ credentials are not forwarded to applications.
 | `AGENT_MAX_ATTEMPTS` | `3` | Includes expired leases. |
 | `AGENT_MAX_MODEL_TOKENS` | `12000` | Per-run model token budget. |
 | `AGENT_MAX_MODEL_OUTPUT_TOKENS` | `1000` | Requested output cap per model call. |
+| `AGENT_MODEL_TIMEOUT_SECONDS` | `90` | Whole model call including streamed body and fallback routes; finite 0.1..360 seconds. Worker deadlines can stop it sooner. |
 | `AGENT_RATE_PER_MINUTE` | `600` | Per tenant/subject fixed-minute request bound. |
 | `AGENT_RATE_DB_PATH` | `/app/data/limits.db` | Local shared-volume limiter if Redis is not selected. |
 | `AGENT_REDIS_URL` | Unset | Optional real Redis; requires storage extra. |
@@ -1002,7 +1073,7 @@ workspace prohibits the required UNIX sockets. Inspect the
 [PR checks](https://github.com/MasterLKH180cm/agentic-system/pull/6/checks) for the
 current remote outcome.
 
-For the five actual PostgreSQL/Redis/S3 cases, use the locked test environment above,
+For the actual PostgreSQL/Redis/S3 cases, use the locked test environment above,
 provision disposable services, and configure `AGENT_TEST_POSTGRES_URL`,
 `AGENT_TEST_REDIS_URL`, `AGENT_TEST_S3_ENDPOINT` and the fixture AWS credentials
 shown in CI. Then run:
@@ -1054,8 +1125,9 @@ constrain recovery. Cancellation stops further claims and cancels local tasks
 when detected; it cannot reverse an already completed external request.
 
 SQLite targets processes sharing a local volume. PostgreSQL supports a shared
-store with serialized advisory-lock transactions; throughput, fairness, and
-high-availability behavior need workload-specific validation. Redis supplies
+store with pooled connections, read snapshots and run-scoped transactions; the
+shared legacy-lock bridge preserves old-worker coordination. Production
+throughput, fairness, and high-availability behavior need workload-specific validation. Redis supplies
 rate limits, not a task queue. No general code sandbox, vector-memory service,
 or tamper-evident audit ledger is claimed.
 

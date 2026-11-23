@@ -8,6 +8,20 @@ from urllib.parse import urlparse
 
 from agentic.features import Features
 
+INKLING_MODEL = "thinkingmachines/Inkling-2-Mini"
+INKLING_BASE_URL = "https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1"
+REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh", "max"}
+
+
+def validate_reasoning_effort(value: object) -> None:
+    if value is None:
+        return
+    if isinstance(value, str) and value in REASONING_EFFORTS:
+        return
+    if type(value) in (float, int) and 0 <= value <= 0.99 and math.isfinite(value):
+        return
+    raise ValueError("reasoning_effort must be a supported name or a finite number within 0..0.99")
+
 
 def secret(name: str) -> str:
     value = os.getenv(name, "")
@@ -29,6 +43,12 @@ class ModelRoute:
     purposes: tuple[str, ...] = ("planning", "synthesis", "evaluation")
     input_cost_per_million: float | None = None
     output_cost_per_million: float | None = None
+    reasoning_effort: str | float | None = None
+
+    def __post_init__(self):
+        validate_reasoning_effort(self.reasoning_effort)
+        if self.reasoning_effort is not None and self.provider != "openai":
+            raise ValueError("reasoning_effort requires an OpenAI-compatible route")
 
 
 def model_routes(
@@ -42,29 +62,44 @@ def model_routes(
     elif provider == "offline":
         return ()
     else:
-        entries = [{"name": "default", "provider": provider}]
+        entries = [{"name": "default", "preset": "inkling"}] if provider == "inkling" else [
+            {"name": "default", "provider": provider}
+        ]
     result = []
     for entry in entries:
         if not isinstance(entry, dict) or set(entry) - {
             "name", "provider", "model", "base_url", "api_key_env", "purposes",
-            "input_cost_per_million", "output_cost_per_million",
+            "input_cost_per_million", "output_cost_per_million", "preset", "reasoning_effort",
         }:
             raise ValueError("Invalid model route fields")
-        kind = entry.get("provider", provider)
+        preset = entry.get("preset")
+        if preset is not None and (not isinstance(preset, str) or preset != "inkling"):
+            raise ValueError("Unknown model route preset")
+        kind = entry.get("provider", "openai" if preset == "inkling" else provider)
+        if preset == "inkling" and kind != "openai":
+            raise ValueError("Inkling preset requires an OpenAI-compatible route")
         if kind not in {"openai", "anthropic"}:
             raise ValueError("Route provider must be openai or anthropic")
-        model = entry.get("model") or os.getenv(
+        model = entry.get("model") or (INKLING_MODEL if preset == "inkling" else os.getenv(
             "OPENAI_CHAT_MODEL" if kind == "openai" else "ANTHROPIC_CHAT_MODEL",
             "gpt-4.1-mini" if kind == "openai" else "claude-sonnet-4-5",
-        )
-        base = entry.get("base_url") or (
+        ))
+        if not isinstance(model, str) or not model.strip() or len(model) > 200:
+            raise ValueError("Invalid route model")
+        base = entry.get("base_url") or (INKLING_BASE_URL if preset == "inkling" else (
             os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
             if kind == "openai" else os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1")
-        )
-        parsed = urlparse(base)
-        if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        ))
+        if not isinstance(base, str):
             raise ValueError("Invalid model route endpoint")
-        key = secret(entry["api_key_env"]) if require_credentials and entry.get("api_key_env") else (
+        parsed = urlparse(base)
+        if (parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password
+                or parsed.query or parsed.fragment):
+            raise ValueError("Invalid model route endpoint")
+        key_env = entry.get("api_key_env", "TINKER_API_KEY" if preset == "inkling" else None)
+        if key_env is not None and (not isinstance(key_env, str) or not key_env or len(key_env) > 200):
+            raise ValueError("Invalid route credential environment name")
+        key = secret(key_env) if require_credentials and key_env else (
             openai_key if kind == "openai" else anthropic_key
         )
         if require_credentials and not key:
@@ -81,7 +116,8 @@ def model_routes(
         name = entry.get("name", f"route-{len(result) + 1}")
         if not isinstance(name, str) or not name or len(name) > 80:
             raise ValueError("Invalid route name")
-        result.append(ModelRoute(name, kind, model, base.rstrip("/"), key, tuple(purposes), *prices))
+        effort = entry.get("reasoning_effort", "high" if preset == "inkling" else None)
+        result.append(ModelRoute(name, kind, model, base.rstrip("/"), key, tuple(purposes), *prices, effort))
     if len({r.name for r in result}) != len(result):
         raise ValueError("Model route names must be unique")
     return tuple(result)
@@ -112,6 +148,7 @@ class Settings:
     rag_admission_policy: str = "compatibility"
     rag_admission_profile_ids: tuple[str, ...] = ()
     rag_timeout_seconds: float = 180
+    model_timeout_seconds: float = 90
     features: Features = field(default_factory=Features)
 
     def __post_init__(self):
@@ -120,6 +157,9 @@ class Settings:
         if (type(self.rag_timeout_seconds) not in (int, float)
                 or not math.isfinite(self.rag_timeout_seconds) or not 1 <= self.rag_timeout_seconds <= 360):
             raise ValueError("AGENT_RAG_TIMEOUT_SECONDS must be finite and within 1..360")
+        if (type(self.model_timeout_seconds) not in (int, float)
+                or not 0.1 <= self.model_timeout_seconds <= 360 or not math.isfinite(self.model_timeout_seconds)):
+            raise ValueError("AGENT_MODEL_TIMEOUT_SECONDS must be finite and within 0.1..360")
         if self.rag_admission_policy not in {"compatibility", "calibrated_required"}:
             raise ValueError("Unknown RAG admission policy")
         profiles = self.rag_admission_profile_ids
@@ -137,6 +177,9 @@ class Settings:
         database_url = os.getenv("AGENT_DATABASE_URL")
         if database_url and not database_url.startswith(("postgresql://", "postgres://")):
             raise ValueError("AGENT_DATABASE_URL must select PostgreSQL; use AGENT_DB_PATH for SQLite")
+        if database_url:
+            from agentic.pgpool import pool_settings
+            pool_settings()
         env = os.getenv("AGENT_ENV", "production").lower()
         try:
             keys = json.loads(os.getenv("AGENT_KEYS_JSON", "{}"))
@@ -158,7 +201,7 @@ class Settings:
         if env == "production" and any(len(key) < 24 for key in keys):
             raise ValueError("Use strong production API keys")
         provider = os.getenv("AGENT_MODEL_PROVIDER", "offline").lower()
-        if provider not in {"offline", "openai", "anthropic"}:
+        if provider not in {"offline", "openai", "anthropic", "inkling"}:
             raise ValueError("Unsupported model provider")
         concurrency = int(os.getenv("AGENT_MAX_PARALLEL", "4"))
         if not 1 <= concurrency <= 16:
@@ -221,5 +264,6 @@ class Settings:
             rag_admission_policy=os.getenv("AGENT_RAG_ADMISSION_POLICY", "compatibility"),
             rag_admission_profile_ids=tuple(profiles),
             rag_timeout_seconds=float(os.getenv("AGENT_RAG_TIMEOUT_SECONDS", "180")),
+            model_timeout_seconds=float(os.getenv("AGENT_MODEL_TIMEOUT_SECONDS", "90")),
             features=features,
         )

@@ -8,7 +8,7 @@ import time
 from agentic.config import Settings
 from agentic.features import FeatureDisabled
 from agentic.model import ModelGateway
-from agentic.store import BudgetExceeded, LeaseLost, Store
+from agentic.store import BudgetExceeded, LeaseLost, Store, deadline_result
 from agentic.telemetry import get_telemetry, span
 from agentic.tools import Tools
 
@@ -36,18 +36,27 @@ class Worker:
                     return
 
     async def process(self, job: dict) -> None:
+        local_deadline = time.monotonic() + self.timeout
+        persisted_deadline = job.get("deadline_at", time.time() + self.timeout)
+
+        def remaining():
+            return min(local_deadline - time.monotonic(), persisted_deadline - time.time())
+
         async def execute():
             inputs = self.store.input_results(job["run_id"], job["depends_on"])
             snapshot = job.get("specification", {}).get("feature_flags")
             with span("workflow.step", {"run.id": job["run_id"], "step.id": job["id"], "tool.name": job["tool"]},
                       allowed=self.tools.config.features.enabled("telemetry", snapshot)):
-                remaining = min(self.timeout, job.get("deadline_at", time.time() + self.timeout) - time.time())
-                return await asyncio.wait_for(self.tools.execute(job, inputs), timeout=max(0, remaining))
+                return await asyncio.wait_for(self.tools.execute(job, inputs), timeout=max(0, remaining()))
 
         task = asyncio.create_task(execute())
         monitor = asyncio.create_task(self._watch(job, task))
         try:
             result = await task
+            # Synchronous handlers or database calls can prevent an asyncio
+            # timer from running. Never accept their result after elapsed time.
+            if remaining() <= 0:
+                raise TimeoutError("Execution deadline elapsed")
             self.store.complete(job, result)
         except asyncio.CancelledError:
             # A revoked/cancelled run cancels this child task without failing it.
@@ -60,8 +69,7 @@ class Worker:
             self.store.complete(job, {"outcome": "budget_exhausted", "stop_reason": "model_budget",
                                       "answer": "Execution stopped at the configured model budget.", "citations": []})
         except TimeoutError:
-            self.store.complete(job, {"outcome": "deadline", "stop_reason": "step_timeout",
-                                      "answer": "Execution stopped at the configured deadline.", "citations": []})
+            self.store.complete(job, deadline_result())
         except FeatureDisabled as exc:
             self.store.complete(job, {"outcome": "policy_denied", "stop_reason": "feature_disabled",
                                       "feature": exc.feature, "answer": str(exc), "citations": []})

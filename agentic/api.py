@@ -27,7 +27,7 @@ MemoryName = Annotated[str, Path(pattern=NAME_PATTERN)]
 def create_app(settings: Settings | None = None) -> FastAPI:
     config = settings or Settings.from_env()
     docs = config.features.enabled("api_docs")
-    app = FastAPI(title="Agentic Workflow System", version="0.4.0",
+    app = FastAPI(title="Agentic Workflow System", version="0.5.0",
                   docs_url="/docs" if docs else None, redoc_url="/redoc" if docs else None,
                   openapi_url="/openapi.json" if docs else None)
 

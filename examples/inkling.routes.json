@@ -1,0 +1,9 @@
+[
+  {
+    "name": "inkling-mini",
+    "preset": "inkling",
+    "api_key_env": "TINKER_API_KEY",
+    "purposes": ["planning", "synthesis", "evaluation"],
+    "reasoning_effort": "high"
+  }
+]

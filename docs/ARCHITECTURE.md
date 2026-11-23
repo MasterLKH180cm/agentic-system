@@ -1,7 +1,7 @@
-# Agentic System v0.4 architecture
+# Agentic System v0.5 architecture
 
 This document describes the current implementation. The acceptance contract is
-[SPEC_V04.md](SPEC_V04.md), extending [SPEC_V03.md](SPEC_V03.md) and
+[SPEC_V05.md](SPEC_V05.md), extending [SPEC_V04.md](SPEC_V04.md), [SPEC_V03.md](SPEC_V03.md) and
 [SPEC_V02.md](SPEC_V02.md). The historical v0.3 checks
 are in [IMPLEMENTATION_REVIEW_V03.md](IMPLEMENTATION_REVIEW_V03.md); the
 [v0.2 review](IMPLEMENTATION_REVIEW.md) remains a historical record.
@@ -67,6 +67,33 @@ MCP also rechecks permissions when invoked. UI/docs routes are absent when
 those interfaces are disabled; other disabled operations return an explicit
 `403 feature_disabled`. Feature changes require API and worker recreation.
 
+## PostgreSQL transaction architecture
+
+The process shares a bounded pool per DSN/configuration. `AGENT_PG_POOL_SIZE`
+(default 4), `AGENT_PG_POOL_TIMEOUT` (5 seconds), and
+`AGENT_PG_POOL_MAX_WAITING` (32) bound connection and admission pressure. Size zero
+uses direct connections for operational comparison. Forked children cannot reuse
+live parent pools; deploy workers with spawn/exec. Pool checkout failures remain
+explicit and never select a different storage backend.
+
+Read methods use read-only repeatable-read transactions, so a run plus its steps
+come from one snapshot without waiting on the global writer lock. Run mutations
+first acquire the shared form of the legacy advisory key, then lock the
+tenant-scoped run row before child rows. The shared compatibility lock permits
+concurrent new workers but waits for the exclusive lock taken by old workers
+and control-plane writers; mixed-version operation remains serialized around
+those older writes. Cancellation, refresh, lease renewal,
+checkpointing, approval, generated plans, artifact references, and model-budget
+reservation/settlement share that order.
+
+PostgreSQL claims find an eligible run with `FOR UPDATE SKIP LOCKED`, then apply
+recovery, dependency/approval/deadline decisions and fencing under its row lock.
+Workers can skip a busy workflow and claim another. Ready steps in the same run
+are still claimed in separate short serialized transitions; tool execution stays
+outside the transaction. Queue readiness is computed from current persisted DAG
+state, including expired leases. No external broker or Redis queue is added.
+SQLite keeps its transactional single-writer claim implementation.
+
 ## Submission and definition snapshots
 
 1. API credentials or a verified JWT determine tenant, roles, scopes, and resource
@@ -100,6 +127,14 @@ The deadline persists across claims, preventing repeated recovery from resetting
 the time allowance. The worker applies that remaining deadline to its local
 coroutine. Loss of the lease cancels that coroutine when the heartbeat detects
 it. Network requests or external effects may already have occurred.
+
+Every owned execution mutation checks the deadline again after acquiring its
+database write locks. Late completion, checkpoint, plan expansion, artifact
+attachment, retry or heartbeat records a terminal deadline instead of progress.
+The worker also checks elapsed time after execution, so a synchronous handler
+cannot evade the async timer. Lock waits may delay finalization; they cannot
+turn an expired execution into successful durable state. Accounting settlement
+remains allowed because expiry cannot erase provider usage already incurred.
 
 Ready DAG steps execute concurrently up to the per-worker bound. Agent-loop
 substeps execute sequentially inside one leased `agent.run` step. Its checkpoint
@@ -189,6 +224,21 @@ rejected before the request. Incomplete pricing returns `estimated_cost_usd:null
 and a separate `known_cost_usd` subtotal. Provider usage may differ from the
 reservation, and the ledger is not an authoritative billing statement.
 
+The Inkling preset targets `thinkingmachines/Inkling-2-Mini` through Tinker's
+OpenAI-compatible sampling endpoint. `reasoning_effort` is validated and explicit;
+`max_completion_tokens` caps generation. No `response_format` claim is made:
+Tinker documents that it ignores this field, so planner/synthesis schema
+validation remains local. Truncated responses fail even if their text happens
+to be valid JSON; any valid provider usage is settled first. Separate reasoning
+content is never returned as an answer.
+
+`AGENT_MODEL_TIMEOUT_SECONDS` bounds the entire gateway call (90 seconds by
+default, configurable from 0.1 to 360), including all fallback attempts and
+response-body reads. Slow dribbling does not reset the timer. The worker can
+cancel sooner at its persisted deadline, and either cancellation path retains
+uncertain reserved charges. Compression is rejected and streamed response bodies
+are capped at 1,000,000 bytes before JSON parsing.
+
 The ledger covers agent planning and synthesis. The deterministic evaluator
 makes no model call. RAG embeddings, model-assisted retrieval, and any other
 external service usage are outside this ledger. A gateway budget is therefore
@@ -198,7 +248,7 @@ not a whole-system spending cap.
 
 | Backend | Implemented behavior | Operational boundary |
 | --- | --- | --- |
-| PostgreSQL (Compose default) | Same Store contract through bound SQL parameters; database-local advisory lock serializes transactions | Shared-state correctness verified; no `SKIP LOCKED` queue or throughput claim |
+| PostgreSQL (Compose default) | Bounded process-owned pools; read-only snapshots; shared legacy-lock bridge; tenant/run mutation locks; eligible-run `SKIP LOCKED` claims | Same run transitions serialize; independent workflows and readers can progress concurrently |
 | SQLite (explicit development) | WAL, transactions, migration of existing workflow columns | API and workers must share a local file/volume |
 | Local artifacts | Tenant-keyed paths, atomic writes, SHA-256 integrity check | Shared artifact storage required across readers/writers |
 | S3-compatible artifacts | Configured bucket, bounded requests, tenant-keyed object names, integrity verification | Requires `storage` extra; actual S3-compatible CI service is tested, cloud deployment is separate |
@@ -230,7 +280,8 @@ they require retention policy, database access controls, and backups.
 The implementation does not provide a managed secret vault, tamper-evident audit
 chain, external task queue, worker autoscaler, deterministic history replay,
 general code sandbox, or semantic memory index. PostgreSQL transactions are
-serialized for correctness; fairness, saturation behavior, failover, and
+serialized per workflow for correctness; admission and schema control still use
+a short global advisory lock. Fairness, saturation behavior, failover, and
 multi-host operations require deployment-specific validation. TLS, identity
 provider administration, secrets provisioning, and backup recovery remain
 operator responsibilities.
