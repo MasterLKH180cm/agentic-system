@@ -67,3 +67,13 @@ quality gates are not rewritten or promoted.
 - Run complete unit/ordinary integration suites, unchanged coverage gates,
   Ruff, and the existing actual two-service HTTP/worker/MCP smoke with the current
   RAG companion. External resource selections remain explicit.
+
+## PostgreSQL fixture scheduling correction
+
+The lock/renewal regression must account for admitted synchronous work outliving
+its cancelled asyncio waiter. After the blocking transaction is released,
+`SKIP LOCKED` may correctly return no claim while the fenced completion or
+heartbeat still releases its row lock. Reclamation is checked within a bounded
+two-second await; the original unrelated-workflow timing limits, rejection of
+stale results, single-attempt checks and new lease-token check remain mandatory.
+An instantaneous claim is not part of the production contract.
