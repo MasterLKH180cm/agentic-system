@@ -30,6 +30,22 @@ This specification precedes implementation of the follow-up review on master
    performed by the environment parser. Both construction paths must enforce
    finite nonnegative prices, known transports, bounded nonempty names/models,
    and valid distinct purposes before budget reservations or credential use.
+5. Authenticated model, RAG and MCP transports inherit ambient HTTP/SOCKS proxy
+   and CA environment settings, despite sending application credentials. These
+   clients must use explicit transport configuration (`trust_env=False`), retain
+   ordinary certificate/hostname verification, and continue to honor an explicitly
+   configured model-route CA file. A proxy-trap regression must show that a
+   credentialed local provider request never reaches an ambient proxy.
+
+## Knowledge-plane selection integration
+
+The Compose RAG service must forward the new model revision, dimensions,
+document/query prefix and input-type selectors, authentication mode and custom
+token window fields. Operators can create a model selection file using the RAG
+CLI and combine it with their existing credentials. Agent API/worker must not
+receive these embedding secrets or install model/tokenizer dependencies. Existing
+image extras remain unchanged; optional `encoders`, `sentence-transformers` and
+`tokenizers` extras are selected explicitly for the RAG image.
 
 ## Compatibility and scope
 
