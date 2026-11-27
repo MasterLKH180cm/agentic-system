@@ -71,8 +71,15 @@ async def test_locked_run_does_not_block_unrelated_completion_or_lease_renewal(d
         await asyncio.to_thread(blocker.join, 2)
     # Its own lock blocked its lease renewal, so the first run is safely fenced.
     assert store.get("tenant", ids[0])["steps"][0]["result"] is None
-    recovered = store.claim()
+    # Cancellation ends the asyncio waiter before admitted synchronous work
+    # releases its transaction. SKIP LOCKED must be allowed to report no claim
+    # while that fenced completion/heartbeat still holds the run row.
+    async with asyncio.timeout(2):
+        while (recovered := await run_sync(store.claim)) is None:
+            await asyncio.sleep(0.01)
     assert recovered["run_id"] == ids[0] and recovered["attempts"] == 1
+    assert recovered["lease_token"] != jobs[0]["lease_token"]
+    assert store.get("tenant", ids[0])["steps"][0]["result"] is None
     assert store.claim() is None
 
 

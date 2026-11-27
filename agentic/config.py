@@ -102,6 +102,21 @@ class ModelRoute:
     supports_json_schema: bool = False
 
     def __post_init__(self):
+        if not isinstance(self.name, str) or not self.name.strip() or len(self.name) > 80:
+            raise ValueError("Invalid route name")
+        if not isinstance(self.provider, str) or self.provider not in {"openai", "anthropic"}:
+            raise ValueError("Route provider must be openai or anthropic")
+        if not isinstance(self.model, str) or not self.model.strip() or len(self.model) > 200:
+            raise ValueError("Invalid route model")
+        if (not isinstance(self.purposes, tuple) or not self.purposes
+                or any(not isinstance(purpose, str) or purpose not in {"planning", "synthesis", "evaluation"}
+                       for purpose in self.purposes)
+                or len(set(self.purposes)) != len(self.purposes)):
+            raise ValueError("Invalid route purposes")
+        prices = (self.input_cost_per_million, self.output_cost_per_million)
+        if any(price is not None and (type(price) not in (float, int) or not 0 <= price <= 1_000_000
+                                      or not math.isfinite(price)) for price in prices):
+            raise ValueError("Route prices must be finite nonnegative numbers")
         if type(self.supports_json_schema) is not bool:
             raise ValueError("supports_json_schema must be boolean")
         if self.supports_json_schema and self.provider != "openai":
@@ -156,7 +171,7 @@ def model_routes(
         kind = entry.get("provider", "openai" if preset is not None else provider)
         if preset is not None and kind != "openai":
             raise ValueError("Inkling preset requires an OpenAI-compatible route")
-        if kind not in {"openai", "anthropic"}:
+        if not isinstance(kind, str) or kind not in {"openai", "anthropic"}:
             raise ValueError("Route provider must be openai or anthropic")
         model = entry.get("model") or (INKLING_MODEL if preset is not None else os.getenv(
             "OPENAI_CHAT_MODEL" if kind == "openai" else "ANTHROPIC_CHAT_MODEL",
@@ -184,7 +199,7 @@ def model_routes(
             raise ValueError("Route prices must be finite nonnegative numbers")
         purposes = entry.get("purposes", ["planning", "synthesis", "evaluation"])
         if not isinstance(purposes, list) or not purposes or not all(
-            p in {"planning", "synthesis", "evaluation"} for p in purposes
+            isinstance(p, str) and p in {"planning", "synthesis", "evaluation"} for p in purposes
         ):
             raise ValueError("Invalid route purposes")
         name = entry.get("name", f"route-{len(result) + 1}")

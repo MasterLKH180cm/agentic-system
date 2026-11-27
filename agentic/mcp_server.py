@@ -14,7 +14,7 @@ HEADERS = {"Authorization": "Bearer " + API_KEY, "X-Agent-Interface": "mcp"}
 
 
 def remote_capabilities() -> dict:
-    with httpx.Client(timeout=20) as client:
+    with httpx.Client(timeout=20, trust_env=False) as client:
         response = client.get(BASE_URL + "/capabilities", headers=HEADERS)
         response.raise_for_status()
         result = response.json()
@@ -61,7 +61,7 @@ def create_server(features: Features | None = None):
         def start_research_workflow(goal: str) -> dict:
             """Start an allowlisted, tenant-scoped workflow; does not approve side effects."""
             checked(submitting=True)
-            with httpx.Client(timeout=100) as client:
+            with httpx.Client(timeout=100, trust_env=False) as client:
                 response = client.post(BASE_URL + "/workflows", headers=HEADERS, json={"goal": goal})
                 response.raise_for_status()
                 return response.json()
@@ -70,7 +70,7 @@ def create_server(features: Features | None = None):
     def get_workflow_status(workflow_id: str) -> dict:
         """Inspect a workflow, tool outputs, and citations."""
         checked()
-        with httpx.Client(timeout=20) as client:
+        with httpx.Client(timeout=20, trust_env=False) as client:
             response = client.get(BASE_URL + "/workflows/" + quote(workflow_id, safe=""), headers=HEADERS)
             response.raise_for_status()
             return response.json()
@@ -79,7 +79,7 @@ def create_server(features: Features | None = None):
     def get_workflow_events(workflow_id: str) -> list[dict]:
         """Inspect the append-only workflow execution events."""
         checked()
-        with httpx.Client(timeout=20) as client:
+        with httpx.Client(timeout=20, trust_env=False) as client:
             response = client.get(BASE_URL + "/workflows/" + quote(workflow_id, safe="") + "/events", headers=HEADERS)
             response.raise_for_status()
             return response.json()

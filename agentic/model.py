@@ -11,6 +11,7 @@ from jsonschema.exceptions import SchemaError, ValidationError
 
 from agentic.config import ModelRoute, Settings, model_ssl_context
 from agentic.async_io import OffloadBusy, run_sync, submit_sync
+from agentic.evidence import strict_json_loads
 from agentic.store import Store
 from agentic.telemetry import span
 
@@ -125,30 +126,9 @@ def format_units(format_spec: dict | None) -> int:
                           separators=(",", ":"), allow_nan=False).encode("utf-8"))
 
 
-def _unique_object(pairs):
-    result = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("Duplicate JSON response fields")
-        result[key] = value
-    return result
-
-
-def _finite_float(value):
-    number = float(value)
-    if not math.isfinite(number):
-        raise ValueError("Nonfinite JSON response value")
-    return number
-
-
-def _reject_constant(_value):
-    raise ValueError("Nonfinite JSON response value")
-
-
 def validate_structured_text(text: str, format_spec: dict) -> None:
     try:
-        parsed = json.loads(text, object_pairs_hook=_unique_object, parse_float=_finite_float,
-                            parse_constant=_reject_constant)
+        parsed = strict_json_loads(text)
         Draft202012Validator(format_spec["json_schema"]["schema"]).validate(parsed)
     except (ValueError, ValidationError, RecursionError):
         raise ValueError("Model returned invalid structured output") from None
@@ -180,6 +160,56 @@ def reported_usage(provider: str, usage: object) -> tuple[int, int] | None:
                for value in (input_tokens, output_tokens, *cached)):
         return None
     return input_tokens + sum(cached), output_tokens
+
+
+def response_text(provider: str, data: dict) -> str:
+    """Accept only a complete text response, preserving separate reasoning blocks."""
+    if provider == "openai":
+        choices = data.get("choices")
+        if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], dict):
+            raise ValueError("Model returned invalid response choices")
+        choice = choices[0]
+        if choice.get("finish_reason") == "length":
+            raise ValueError("Model output was truncated by its token limit")
+        if "finish_reason" in choice and choice["finish_reason"] != "stop":
+            raise ValueError("Model did not finish a text response normally")
+        message = choice.get("message")
+        if not isinstance(message, dict):
+            raise ValueError("Model returned invalid response message")
+        if message.get("refusal"):
+            raise ValueError("Model refused the requested response")
+        if message.get("tool_calls") not in (None, []) or message.get("function_call") is not None:
+            raise ValueError("Model returned tool calls in a text response")
+        text = message.get("content")
+    else:
+        if data.get("stop_reason") == "max_tokens":
+            raise ValueError("Model output was truncated by its token limit")
+        if "stop_reason" in data and data["stop_reason"] not in ("end_turn", "stop_sequence"):
+            raise ValueError("Model did not finish a text response normally")
+        blocks = data.get("content")
+        if not isinstance(blocks, list) or not blocks:
+            raise ValueError("Model returned invalid content blocks")
+        fragments = []
+        for block in blocks:
+            if not isinstance(block, dict):
+                raise ValueError("Model returned invalid content block")
+            kind = block.get("type")
+            if kind == "text":
+                if not isinstance(block.get("text"), str):
+                    raise ValueError("Model returned invalid text block")
+                fragments.append(block["text"])
+            elif kind in ("thinking", "redacted_thinking"):
+                field = "thinking" if kind == "thinking" else "data"
+                if not isinstance(block.get(field), str):
+                    raise ValueError("Model returned invalid reasoning block")
+            else:
+                raise ValueError("Model returned nontext content in a text response")
+        text = "".join(fragments)
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError("Model returned no text")
+    if len(text) > 32000:
+        raise ValueError("Model text exceeds the response limit")
+    return text
 
 
 class ModelGateway:
@@ -294,16 +324,15 @@ class ModelGateway:
                 if route.auth_mode == "required" and not route.api_key:
                     raise ValueError("Configured model route requires an API key")
                 body = self._request_body(route, system, message, output_limit, format_spec)
-                # Local no-auth traffic must never pass through environment
-                # proxies. Hosted routes retain their existing proxy behavior.
-                trust_environment = route.auth_mode != "none" and route.ca_file is None
-                transport_key = (trust_environment, route.ca_file)
+                # Credentialed service traffic has an explicit destination and
+                # CA policy. Ambient proxy/CA variables must not reroute it.
+                transport_key = route.ca_file
                 if transport_key not in transports:
                     options = {} if route.ca_file is None else {
                         "verify": await run_sync(model_ssl_context, route.ca_file),
                     }
                     transports[transport_key] = await clients.enter_async_context(httpx.AsyncClient(
-                        timeout=None, follow_redirects=False, trust_env=trust_environment, **options,
+                        timeout=None, follow_redirects=False, trust_env=False, **options,
                     ))
                 client = transports[transport_key]
                 if clock() >= deadline:
@@ -347,7 +376,9 @@ class ModelGateway:
                     response.raise_for_status()
                     if len(response.content) > 1_000_000:
                         raise ValueError("Model response exceeds size limit")
-                    data = response.json()
+                    data = strict_json_loads(response.content)
+                    if not isinstance(data, dict):
+                        raise ValueError("Model returned invalid response envelope")
                     counts = reported_usage(route.provider, data.get("usage"))
                     if counts is not None:
                         await settle(
@@ -356,26 +387,7 @@ class ModelGateway:
                         )
                     else:
                         await settle(status="estimated_missing_usage")
-                    if route.provider == "openai":
-                        choice = data["choices"][0]
-                        if choice.get("finish_reason") == "length":
-                            raise ValueError("Model output was truncated by its token limit")
-                        if "finish_reason" in choice and choice["finish_reason"] != "stop":
-                            raise ValueError("Model did not finish a text response normally")
-                        message_data = choice["message"]
-                        if message_data.get("refusal"):
-                            raise ValueError("Model refused the requested response")
-                        text = message_data["content"]
-                    else:
-                        if data.get("stop_reason") == "max_tokens":
-                            raise ValueError("Model output was truncated by its token limit")
-                        if "stop_reason" in data and data["stop_reason"] not in {"end_turn", "stop_sequence"}:
-                            raise ValueError("Model did not finish a text response normally")
-                        text = "".join(block["text"] for block in data["content"] if block.get("type") == "text")
-                    if not isinstance(text, str) or not text.strip():
-                        raise ValueError("Model returned no text")
-                    if len(text) > 32000:
-                        raise ValueError("Model text exceeds the response limit")
+                    text = response_text(route.provider, data)
                     if counts is not None and counts[1] > output_limit:
                         raise ValueError("Model exceeded its configured output token limit")
                     if format_spec is not None:

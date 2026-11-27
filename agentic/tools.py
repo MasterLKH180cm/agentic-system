@@ -212,7 +212,7 @@ class Tools:
         # One deadline covers connection, headers and the entire streamed body.
         # Cancellation from the worker's enclosing step deadline still wins.
         async with asyncio.timeout(self.config.rag_timeout_seconds), httpx.AsyncClient(
-            timeout=None, follow_redirects=False,
+            timeout=None, follow_redirects=False, trust_env=False,
         ) as client:
             async with client.stream("POST",
                 self.config.rag_url + "/query",

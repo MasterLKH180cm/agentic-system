@@ -471,6 +471,8 @@ class Store:
             return True
 
     def approve(self, tenant: str, run_id: str, step_id: str, approved: bool, reason: str) -> bool:
+        if type(approved) is not bool:
+            raise ValueError("Approval decision must be boolean")
         with self._run_connection(run_id, tenant=tenant) as conn:
             conn.execute("BEGIN IMMEDIATE")
             run = conn.execute(

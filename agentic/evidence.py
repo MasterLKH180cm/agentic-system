@@ -296,7 +296,35 @@ def strict_json_loads(value: str | bytes):
     def invalid_constant(value):
         raise ValueError("Non-finite JSON number")
 
-    return json.loads(value, object_pairs_hook=unique, parse_constant=invalid_constant)
+    def finite_float(value):
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError("Non-finite JSON number")
+        return number
+
+    try:
+        result = json.loads(value, object_pairs_hook=unique, parse_constant=invalid_constant,
+                            parse_float=finite_float)
+        # JSON escape sequences can decode to lone surrogates. These cannot be
+        # persisted or emitted as UTF-8, even when the original bytes are valid.
+        pending = [(result, 0)]
+        while pending:
+            item, depth = pending.pop()
+            if depth > 64:
+                raise ValueError("JSON response exceeds nesting limit")
+            if isinstance(item, dict):
+                for key, child in item.items():
+                    key.encode("utf-8")
+                    pending.append((child, depth + 1))
+            elif isinstance(item, list):
+                pending.extend((child, depth + 1) for child in item)
+            elif isinstance(item, str):
+                item.encode("utf-8")
+        return result
+    except UnicodeError:
+        raise ValueError("Invalid Unicode in JSON response") from None
+    except RecursionError:
+        raise ValueError("JSON response exceeds nesting limit") from None
 
 
 def refusal_result(reason: str, *, stop_reason: str = "no_usable_evidence") -> dict:

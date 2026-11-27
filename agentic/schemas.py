@@ -99,7 +99,7 @@ class Step(StrictModel):
     tool: ToolName
     args: dict = Field(default_factory=dict)
     depends_on: list[str] = Field(default_factory=list, max_length=16)
-    approval_required: bool = False
+    approval_required: bool = Field(default=False, strict=True)
 
     @model_validator(mode="after")
     def validate_step(self) -> "Step":
@@ -176,7 +176,7 @@ class WorkflowIn(StrictModel):
 
 
 class ApprovalIn(StrictModel):
-    approved: bool
+    approved: bool = Field(strict=True)
     reason: str = Field(default="", max_length=500)
 
 
