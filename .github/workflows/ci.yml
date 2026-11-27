@@ -40,7 +40,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 0f72f4569e26528dc0c480baec7ad6320160d1ce # exact reviewed LiteLLM companion
+          ref: d3453c848217f6ed55b3a921342747c5479ee351 # exact reviewed model/tokenizer companion
           path: external/RAGs
       - uses: actions/setup-python@v5
         with:
@@ -126,7 +126,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 0f72f4569e26528dc0c480baec7ad6320160d1ce # exact reviewed LiteLLM companion
+          ref: d3453c848217f6ed55b3a921342747c5479ee351 # exact reviewed model/tokenizer companion
           path: external/RAGs
       - uses: actions/setup-python@v5
         with:
@@ -248,7 +248,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 0f72f4569e26528dc0c480baec7ad6320160d1ce # exact reviewed LiteLLM companion
+          ref: d3453c848217f6ed55b3a921342747c5479ee351 # exact reviewed model/tokenizer companion
           path: external/RAGs
       - name: Put the sibling RAGs build context in place
         run: |
@@ -316,7 +316,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 0f72f4569e26528dc0c480baec7ad6320160d1ce # exact reviewed LiteLLM companion
+          ref: d3453c848217f6ed55b3a921342747c5479ee351 # exact reviewed model/tokenizer companion
           path: external/RAGs
       - uses: actions/setup-python@v5
         with:
@@ -450,7 +450,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 0f72f4569e26528dc0c480baec7ad6320160d1ce # exact reviewed LiteLLM companion
+          ref: d3453c848217f6ed55b3a921342747c5479ee351 # exact reviewed model/tokenizer companion
           path: external/RAGs
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -513,7 +513,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 0f72f4569e26528dc0c480baec7ad6320160d1ce # exact reviewed LiteLLM companion
+          ref: d3453c848217f6ed55b3a921342747c5479ee351 # exact reviewed model/tokenizer companion
           path: external/RAGs
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -619,7 +619,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MasterLKH180cm/RAGs
-          ref: 0f72f4569e26528dc0c480baec7ad6320160d1ce # exact reviewed LiteLLM companion
+          ref: d3453c848217f6ed55b3a921342747c5479ee351 # exact reviewed model/tokenizer companion
           path: external/RAGs
           persist-credentials: false
       - uses: actions/setup-python@v5
