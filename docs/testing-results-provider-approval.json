@@ -1,0 +1,188 @@
+{
+  "baseline": "732c10728c2f8014388af03a951f73fdbb1c95e5",
+  "compose": {
+    "compose_version": "5.8.0",
+    "configuration_checks": [
+      {
+        "application_environments_equal": true,
+        "id": "configuration_and_role_wiring",
+        "passed": true
+      }
+    ],
+    "engine_started": false,
+    "new_embedding_selector_count": 9,
+    "render_calls": [
+      [
+        "config",
+        "--format",
+        "json"
+      ],
+      [
+        "config",
+        "--format",
+        "json"
+      ]
+    ]
+  },
+  "core": {
+    "cases": 1010,
+    "deselected_external": 20,
+    "errors": 0,
+    "failures": 0,
+    "integration": 458,
+    "passed": 1010,
+    "sha256": "1e441f9cda238acd5d4d8ca7d96c7ddbe4203af2a1003467ca3426733a2afd93",
+    "skipped": 0,
+    "unit": 552
+  },
+  "coverage": {
+    "branch_percent": 85.20055325034578,
+    "branches": 1446,
+    "covered_branches": 1232,
+    "covered_lines": 3247,
+    "excluded_lines": 0,
+    "floors": {
+      "branches": 75,
+      "lines": 85
+    },
+    "line_percent": 90.87601455359642,
+    "production_modules": 24,
+    "scope": "ordinary parent-process unit and integration only",
+    "statements": 3573
+  },
+  "external_not_executed_locally": [
+    "redis",
+    "s3"
+  ],
+  "frozen_evidence_and_dependency_changes": [],
+  "generated_at": "2026-11-27T03:55:08.382070+00:00",
+  "initial_failures": [
+    {
+      "expected": true,
+      "reason": "21 provider tests reject cases that the original implementation accepted or mishandled",
+      "result": {
+        "cases": 21,
+        "errors": 0,
+        "failures": 21,
+        "passed": 0,
+        "sha256": "d7b86761bb9b3c3f7f6bbd2f5c8b0a6b7c08cd87f81bad1f9c6b36cdff21c606",
+        "skipped": 0
+      },
+      "scope": "baseline targeted regression"
+    },
+    {
+      "reason": "Ambient SOCKS proxy caused missing socksio import before requests; final production clients use explicit trust_env=False",
+      "scope": "initial local core invocation"
+    },
+    {
+      "failed_harnesses": [
+        "v02",
+        "v03"
+      ],
+      "reason": "Bundled pgvector0.6.2 lacks l2_normalize(vector); rebuilt official already-declared pgvector0.8.7 and reran successfully",
+      "scope": "initial PostgreSQL E2E"
+    },
+    {
+      "reason": "Cancelled asyncio waiters can return before admitted synchronous transactions release row locks; bounded reclaim wait preserves all fencing assertions",
+      "result": {
+        "cases": 18,
+        "errors": 0,
+        "failures": 1,
+        "passed": 17,
+        "sha256": "1e34214dce0bddcd6fc14179686d0bfd2461558d6384d0c3c05c2f4c27daf1a5",
+        "skipped": 0
+      },
+      "scope": "PostgreSQL recovery fixture"
+    }
+  ],
+  "limits": [
+    "No live paid-provider inference or new model-quality/performance measurement",
+    "PostgreSQL17 deployment and actual Docker/Redis/S3/browser/research gates remain remote CI responsibilities"
+  ],
+  "local_evidence_sha256": {
+    "provider-review-baseline-junit.xml": "d7b86761bb9b3c3f7f6bbd2f5c8b0a6b7c08cd87f81bad1f9c6b36cdff21c606",
+    "provider-review-compose.json": "d50e4a973bd9ec8f67027b50b1ab1bc438c9c2c7f4c692b88b3355b996550d5e",
+    "provider-review-coverage.json": "b01e3136483dd002fe641276c2d73581703f06e0b812b140bbef602c5f3b26f7",
+    "provider-review-inventory.json": "8a4651484adbc98572845df4cad48bd7db6355935307274cfc4a017a803a9c13",
+    "provider-review-junit.xml": "1e441f9cda238acd5d4d8ca7d96c7ddbe4203af2a1003467ca3426733a2afd93",
+    "provider-review-postgres-e2e-final-runtime.json": "c7641786b7258e8330b998e97c44f5ba5d99957880ee5d0a793a453bd68b7893",
+    "provider-review-postgres-e2e-final.log": "e7edabf3fbce8a1e97f87505ee4f3af8d1e82bc7c842fede7e4e5f10e5520aed",
+    "provider-review-postgres-e2e.log": "afc7ab46bec29ae6973424b4431eb68f8f7537d69178f2697982863e00602d1f",
+    "provider-review-postgres-evidence-final-runtime.json": "f9c5562adea1deda6f7dfaf1700882321a667a7b7908ff7af1ef60855f0e8d51",
+    "provider-review-postgres-evidence-final.log": "740fec930bf7ce65b6f2c813d30151d10ff6e562a935b706e2c238830047078f",
+    "provider-review-postgres-evidence.log": "48b9177fdef0c5d0b5672c39b9b19734e5850e3777d3c5930009f7002985b2e2",
+    "provider-review-postgres-final-junit.xml": "1e34214dce0bddcd6fc14179686d0bfd2461558d6384d0c3c05c2f4c27daf1a5",
+    "provider-review-postgres-recovery-junit.xml": "b827dc12fa104091d02f01845c0fe48d1699214a4a6f01702a9218992060d043",
+    "provider-review-postgres-recovery-runtime.json": "c4a527fc8dfb6ab8880ece8597748620aacef54042c9b76421bf750a5bd4b0f2"
+  },
+  "postgres": {
+    "cases": 18,
+    "errors": 0,
+    "failures": 0,
+    "passed": 18,
+    "runtime": {
+      "non_superuser_roles": true,
+      "pgvector": "0.8.7",
+      "postgres": "16.2",
+      "tcp_only": true
+    },
+    "sha256": "b827dc12fa104091d02f01845c0fe48d1699214a4a6f01702a9218992060d043",
+    "skipped": 0
+  },
+  "process_checks": {
+    "postgres_v02": {
+      "passed": 7,
+      "total": 7
+    },
+    "postgres_v03_evidence": {
+      "passed": 3,
+      "total": 3
+    },
+    "sqlite_v02": {
+      "passed": 7,
+      "total": 7
+    }
+  },
+  "runtime_provenance": {
+    "compose_asset_sha256": "b8840f5008c447f41fce0a57ae3adeab42c89b1eb6e6012524bcabbfb4ffbaf6",
+    "pgvector": {
+      "files_installed": 44,
+      "source": "f37c13f68b57d2c3472b2214fbcff699d6d34876",
+      "vector_sha256": "a659f084416ca5fd7ba9d28c1c1b4ddfaafc19f96455e45e9c30521401f308e2",
+      "version": "0.8.7"
+    }
+  },
+  "schema_version": 1,
+  "source_sha256": {
+    "agentic/__init__.py": "93cbba17866ad838ede59bc1e0d1a8c27b98a4f6a824dbe2aedf53fd40141d60",
+    "agentic/admission.py": "d7151298e10ab40f673478ac8a711aa1316f9143bd83981c3e303088aa3d0a12",
+    "agentic/api.py": "394ed1f95776728fdceac62f62606e28c87064c9dab5ae658dfae5c3fc9c493c",
+    "agentic/async_io.py": "87dc9cf410a1aa1df018520678740e4e249b30691a9dfa01c23e1607b99c0854",
+    "agentic/auth.py": "ec5e56cf818a74ef14dcead7862d17d401fc7aaaf00ec30354413b21c0de03c5",
+    "agentic/config.py": "73483d51591bcc380704034054a4b23b98334c1a652e8fbd4a4948255f73b90d",
+    "agentic/control.py": "c5727da65ef98281bc302966b2346af7dabdf529c834777073c64624265b0b91",
+    "agentic/evidence.py": "0c4d3f85d4d8a34f75124533dbc2042f8948eb6e4a25c36d9d76c877da7467fb",
+    "agentic/features.py": "a4bf8d7d7e711b61e7d79bae28f73196b71b7fa4b3f52d0faaa6e4ec7e842744",
+    "agentic/interfaces.py": "e8013046cfe5cf1aff64f23f962e9dd29d9157f9b383ea4201338d1a7447af51",
+    "agentic/limits.py": "ee20a69c4c3057e5c2e4b9bb245dd42b1b5ebd597007a5c9b0a46209598059de",
+    "agentic/mcp_server.py": "294a068115c84ef20878f8d0dd87477a9bd3b58a198be7f6fc3cf0bae33e4805",
+    "agentic/memory.py": "6ce10dfcfe96c1cb8e4cb2ecace8ed39f487b62d9e04e0924213722620081d6e",
+    "agentic/model.py": "7c53d934a31f9a35c88c6e9b585954f6fd52e17fb79b9b92ae3ec7115f8707f7",
+    "agentic/pgpool.py": "ecbbc74ca4af88d695fbbab5e7e67e7523aa8f641c3c556d86cdef535fc10fde",
+    "agentic/planner.py": "b34a39ad1b470233e74c3e0d854cf87610918945b99644b44c855055742263a0",
+    "agentic/postgres.py": "b0cf5b77b4374d35018870aff1c52df96bb441550a923fe7b649c51a9f2fd4a7",
+    "agentic/runtime.py": "3df7b76120772bdff5206f59fbf88380177f00adb7b987d264205002411ef1c2",
+    "agentic/schemas.py": "a03af99e09f47d6bb8854c0809e1e33c92f2f8dcd963be515b739bfd92a9c1d4",
+    "agentic/storage_adapters.py": "2fa864206bdf9d22d7c33564b46394a61010391c9498d6183076ecdd5aeb9281",
+    "agentic/store.py": "f8b0612fe784780fda034fbb7053d939f3074e032a4a39db9fa047fdab4fb7c9",
+    "agentic/telemetry.py": "b888b2c9794394e954944e3feab128c411485d56baec426c68073393cd525b4e",
+    "agentic/tools.py": "d1cacca66fda3f9e6b3bdd21418b0a0eda14dc26765517c17da64d31c52742aa",
+    "agentic/worker.py": "6828a5d6d38ec42d5d48ab8f8cea9b58354c2a6971c10e5c1db71e54eeb8bd76"
+  },
+  "specification_commits": [
+    "4682122",
+    "39ca1ed",
+    "906a0bd"
+  ],
+  "unique_pytest_cases_passed": 1028
+}

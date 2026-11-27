@@ -219,6 +219,116 @@ async def test_protocol_errors_do_not_fallback_or_erase_reserved_charges(provide
     assert usage["known_cost_usd"] > 0 and not usage["usage_complete"]
 
 
+@pytest.mark.parametrize("invalid", [
+    b'"usage":{"prompt_tokens":999,"completion_tokens":3},',
+    b'"extra":NaN,', b'"extra":Infinity,', b'"extra":1e309,',
+    b'"extra":"\\ud800",', b'"\\udfff":"private-value",',
+    b'"extra":' + b'[' * 65 + b'0' + b']' * 65 + b',',
+])
+async def test_invalid_outer_json_cannot_hide_usage_or_pass_as_success(provider, invalid):
+    model, store, run_id, state = provider
+    original = state["replies"]["primary"]["body"]
+    state["replies"]["primary"]["body"] = b"{" + invalid + original[1:]
+    with pytest.raises(ValueError):
+        await complete(model, run_id)
+    usage = await settled_usage(store, run_id)
+    call, = usage["calls"]
+    assert call["status"] == "uncertain_response_error"
+    assert call["charged_tokens"] == ModelGateway.input_units("System", "Question") + 32
+    assert [call["path"] for call in state["calls"]] == ["/primary/chat/completions"]
+
+
+@pytest.mark.parametrize("body", [b"null", b"[]", b"true", b'"answer"', b"[" * 1500 + b"]" * 1500])
+async def test_invalid_outer_shape_is_a_controlled_value_error(provider, body):
+    model, store, run_id, state = provider
+    state["replies"]["primary"]["body"] = body
+    with pytest.raises(ValueError):
+        await complete(model, run_id)
+    call, = (await settled_usage(store, run_id))["calls"]
+    assert call["status"] == "uncertain_response_error"
+    assert len(state["calls"]) == 1
+
+
+@pytest.mark.parametrize("field,value", [
+    ("tool_calls", [{"id": "unrequested-tool", "type": "function", "function": {"name": "unsafe"}}]),
+    ("function_call", {"name": "unsafe", "arguments": "{}"}),
+    ("tool_calls", {}), ("tool_calls", False),
+])
+async def test_tool_calls_cannot_be_hidden_behind_text_without_finish_reason(provider, field, value):
+    model, store, run_id, state = provider
+    body = json.loads(response_body())
+    body["choices"][0]["message"][field] = value
+    state["replies"]["primary"]["body"] = json.dumps(body).encode()
+    with pytest.raises(ValueError, match="tool calls"):
+        await complete(model, run_id)
+    call, = store.usage("tenant-a", run_id)["calls"]
+    assert call["status"] == "reported" and call["charged_tokens"] == 10
+    assert len(state["calls"]) == 1
+
+
+@pytest.mark.parametrize("extra", [
+    {"type": "tool_use", "id": "unrequested-tool", "name": "unsafe", "input": {}},
+    {"type": "server_tool_use", "id": "unrequested-tool", "name": "unsafe", "input": {}},
+    {"type": "future_unknown_block"}, {"type": []}, {"type": "text", "text": None},
+    {"type": "thinking", "thinking": 42}, {"type": "redacted_thinking", "data": None},
+    None, "invalid-block", [],
+])
+async def test_anthropic_malformed_or_effectful_blocks_fail_and_keep_reported_usage(provider, extra):
+    model, store, run_id, state = provider
+    route = model.config.routes[1]
+    model.config = replace(model.config, routes=(route,))
+    body = json.loads(response_body("anthropic"))
+    body["content"].append(extra)
+    state["replies"][route.name]["body"] = json.dumps(body).encode()
+    with pytest.raises(ValueError):
+        await complete(model, run_id)
+    call, = store.usage("tenant-a", run_id)["calls"]
+    assert call["status"] == "reported" and call["charged_tokens"] == 10
+    assert len(state["calls"]) == 1
+
+
+async def test_anthropic_reasoning_blocks_are_validated_but_never_returned_as_text(provider):
+    model, store, run_id, state = provider
+    route = model.config.routes[1]
+    model.config = replace(model.config, routes=(route,))
+    body = json.loads(response_body("anthropic", text="Visible answer"))
+    body["content"] = [
+        {"type": "thinking", "thinking": "Synthetic private reasoning", "signature": "fixture"},
+        {"type": "redacted_thinking", "data": "Synthetic encrypted reasoning"},
+        *body["content"], {"type": "text", "text": " preserved."},
+    ]
+    state["replies"][route.name]["body"] = json.dumps(body).encode()
+    assert await complete(model, run_id) == "Visible answer preserved."
+    assert store.usage("tenant-a", run_id)["calls"][0]["charged_tokens"] == 10
+
+
+async def test_authenticated_model_ignores_ambient_proxy_and_ca_variables(provider, monkeypatch, tmp_path):
+    model, _, run_id, state = provider
+    trapped = []
+
+    async def proxy(reader, writer):
+        trapped.append(await reader.readuntil(b"\r\n\r\n"))
+        writer.write(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+
+    server = await asyncio.start_server(proxy, "127.0.0.1", 0)
+    proxy_url = f"http://127.0.0.1:{server.sockets[0].getsockname()[1]}"
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+        monkeypatch.setenv(name, proxy_url)
+    monkeypatch.setenv("NO_PROXY", "")
+    monkeypatch.setenv("no_proxy", "")
+    monkeypatch.setenv("SSL_CERT_FILE", str(tmp_path / "unselected-ca.pem"))
+    try:
+        assert await complete(model, run_id) == "Fixture answer"
+    finally:
+        server.close()
+        await server.wait_closed()
+    assert trapped == []
+    assert state["calls"][0]["headers"]["authorization"] == "Bearer local-fixture-key"
+
+
 async def test_http_cancellation_retains_uncertain_reservation_without_fallback(provider):
     model, store, run_id, state = provider
     state["hold"] = True

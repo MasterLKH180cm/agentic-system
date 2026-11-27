@@ -70,6 +70,20 @@ async def test_bridge_enabled_tools_forward_credentials_and_server_marker(bridge
     assert all(call["headers"]["X-Agent-Interface"] == "mcp" for call in bridge["calls"])
 
 
+async def test_bridge_credentials_ignore_unselected_proxy_and_ca_environment(bridge, monkeypatch, tmp_path):
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+        monkeypatch.setenv(name, "http://127.0.0.1:1")
+    monkeypatch.setenv("NO_PROXY", "")
+    monkeypatch.setenv("no_proxy", "")
+    monkeypatch.setenv("SSL_CERT_FILE", str(tmp_path / "unselected-ca.pem"))
+    server = mcp_server.create_server(Features())
+    await server.call_tool("start_research_workflow", {"goal": "calculate 6 * 7"})
+    await server.call_tool("get_workflow_status", {"workflow_id": "fixture-id"})
+    await server.call_tool("get_workflow_events", {"workflow_id": "fixture-id"})
+    assert len(bridge["calls"]) == 7
+    assert all(call["headers"]["Authorization"] == "Bearer local-fixture-key" for call in bridge["calls"])
+
+
 def test_local_mcp_disable_never_contacts_service(bridge):
     with pytest.raises(FeatureDisabled, match="mcp"):
         mcp_server.create_server(Features({"mcp": False}))

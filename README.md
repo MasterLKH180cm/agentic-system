@@ -1014,6 +1014,89 @@ Profiles and feature files under `data/config` are available at `/app/config`.
 Secret-file paths must be separately provisioned and readable by container
 UID 10001. Set a secret value or its matching file, not both.
 
+### Choose an embedding model and tokenizer
+
+Embedding and document tokenization run in RAGs. Agentic's `rag.search` tool
+uses the configured knowledge service, so each workflow follows its active
+collection/index profile. Start with the model browser in the sibling RAGs
+checkout:
+
+```bash
+../RAGs/.venv/bin/rags models list
+../RAGs/.venv/bin/rags models show bge-small-zh
+../RAGs/.venv/bin/rags tokenizers list
+../RAGs/.venv/bin/rags configure --embedding bge-small-zh --tokenizer unicode \
+  --output rags.models.env
+```
+
+Run `rags configure` without selection arguments for the guided picker. Its
+output contains model settings; keep your existing service credentials in `.env`.
+The generated overlay uses the RAG CLI's quoting format. Pass it to the RAG CLI
+with `--model-config`, for example when checking the selected configuration:
+
+```bash
+../RAGs/.venv/bin/rags doctor --env-file .env --model-config rags.models.env --no-db
+```
+
+For the full Compose stack, put the selected values in the stack's `.env` using
+Compose's dotenv syntax. For the example above:
+
+```dotenv
+RAGS_EMBEDDING_PROVIDER=fastembed
+RAGS_EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
+RAGS_TOKENIZER_JSON='{"backend":"unicode"}'
+```
+
+Clear obsolete embedding revision, dimension, prefix, input-type and token-window
+settings when changing models. Generated CLI overlays perform these resets for
+CLI startup, but they are not Compose dotenv exports: shell-style quoting of an
+apostrophe can be rejected by Compose. After updating the stack's `.env`, apply
+its configuration with:
+
+```bash
+docker compose --env-file .env up -d --build --wait
+```
+
+Install the selected backend in the RAG image by setting `RAGS_EXTRAS` in `.env`
+before rebuilding. Keep the default extras and append only the ones you need:
+
+| Selection | Additional RAG extra | Example preset |
+| --- | --- | --- |
+| FastEmbed local encoder | `encoders` | `bge-small-zh`, `bge-small-en`, `multilingual-e5-large` |
+| Sentence Transformers local encoder | `sentence-transformers` | `st-minilm`, `st-multilingual-e5-base`, `st-bge-m3` |
+| OpenAI or approved compatible gateway | None | `openai-small`, `openai-large`, `gateway` |
+| Local Ollama service | None in RAG; run the selected model in Ollama | `ollama-nomic`, `ollama-bge-m3` |
+| Local Hugging Face or SentencePiece tokenizer artifact | `tokenizers` | `huggingface`, `sentencepiece` |
+
+For example, `RAGS_EXTRAS=postgres,pdf,mcp,vision,encoders` installs FastEmbed
+while preserving the image's default capabilities. Local tokenizer paths in
+Compose must point to container-readable files, for example
+`/app/config/tokenizer.json`; these tokenizer adapters do not download files.
+Literal-loopback URLs in a container refer to that container. A separately
+hosted embedding service needs an accessible endpoint and its required
+authentication configuration.
+
+The RAG environment forwards `RAGS_EMBEDDING_REVISION`,
+`RAGS_EMBEDDING_DIMENSIONS`, `RAGS_EMBEDDING_QUERY_PREFIX`,
+`RAGS_EMBEDDING_DOCUMENT_PREFIX`, `RAGS_EMBEDDING_QUERY_INPUT_TYPE`,
+`RAGS_EMBEDDING_DOCUMENT_INPUT_TYPE`, `RAGS_EMBEDDING_AUTH_MODE`,
+`RAGS_EMBEDDING_TOKENIZER_JSON` and `RAGS_EMBEDDING_MAX_TOKENS` alongside the
+existing provider, model, endpoint and tokenizer settings. Custom model windows
+require both a tokenizer definition and a token limit. Check the RAG model
+description for required prefixes, dimensions and input limits.
+
+Changing an embedding model or its identity requires a compatible new
+collection or reindexing. Do not mix vectors from different embedding spaces.
+The picker does not enable disabled operator feature permissions; update the
+relevant RAG feature file deliberately. Agentic's model budget remains a
+conservative UTF-8 reservation until the provider reports actual usage.
+
+Model, RAG and MCP service clients use explicit TLS/proxy settings and ignore
+ambient `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `SSL_CERT_FILE` and
+`SSL_CERT_DIR`. An explicitly configured model-route `ca_file` remains supported
+with certificate and hostname verification. This prevents environment variables
+from redirecting service credentials.
+
 An arbitrary custom `api_key_env` name cannot be inferred from JSON by Compose.
 For a route referring to `SECOND_PROVIDER_KEY`, supply that value privately in
 `.env` and add the explicit mapping to both processes in `compose.providers.yaml`:
