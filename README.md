@@ -1031,10 +1031,30 @@ checkout:
 
 Run `rags configure` without selection arguments for the guided picker. Its
 output contains model settings; keep your existing service credentials in `.env`.
-For the full Compose stack, later environment files take precedence:
+The generated overlay uses the RAG CLI's quoting format. Pass it to the RAG CLI
+with `--model-config`, for example when checking the selected configuration:
 
 ```bash
-docker compose --env-file .env --env-file rags.models.env up -d --build --wait
+../RAGs/.venv/bin/rags doctor --env-file .env --model-config rags.models.env --no-db
+```
+
+For the full Compose stack, put the selected values in the stack's `.env` using
+Compose's dotenv syntax. For the example above:
+
+```dotenv
+RAGS_EMBEDDING_PROVIDER=fastembed
+RAGS_EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
+RAGS_TOKENIZER_JSON='{"backend":"unicode"}'
+```
+
+Clear obsolete embedding revision, dimension, prefix, input-type and token-window
+settings when changing models. Generated CLI overlays perform these resets for
+CLI startup, but they are not Compose dotenv exports: shell-style quoting of an
+apostrophe can be rejected by Compose. After updating the stack's `.env`, apply
+its configuration with:
+
+```bash
+docker compose --env-file .env up -d --build --wait
 ```
 
 Install the selected backend in the RAG image by setting `RAGS_EXTRAS` in `.env`
